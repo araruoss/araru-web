@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/araruoss/araru-web/compare/v0.2.0...v0.2.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* **reader:** sanitize epub and mobi content ([#18](https://github.com/araruoss/araru-web/issues/18)) ([f81b2a0](https://github.com/araruoss/araru-web/commit/f81b2a063dfe620adf1baeba7f04c904a64f8845))
+
 ## [0.2.0](https://github.com/araruoss/araru-web/compare/v0.1.0...v0.2.0) (2026-08-30)
 
 
