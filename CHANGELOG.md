@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0](https://github.com/araruoss/araru-web/compare/v0.1.0...v0.2.0) (2026-08-30)
+
+
+### Features
+
+* **admin:** consolidate administrative experience ([9675dc7](https://github.com/araruoss/araru-web/commit/9675dc7d173ecfbb960f0c0d99e91f5065409d1d))
+
+## Changelog
+
 Araru Web follows [Semantic Versioning](https://semver.org/). Release entries are generated from Conventional Commits while preserving the historical notes below.
 
 ## Unreleased
