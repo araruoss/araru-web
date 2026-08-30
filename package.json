@@ -1,6 +1,6 @@
 {
   "name": "@araru/web",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
-    "@tanstack/react-query": "^5.102.8",
+    "@tanstack/react-query": "^5.102.7",
     "@tanstack/react-virtual": "^3.14.10",
     "axios": "^1.20.0",
     "class-variance-authority": "^0.7.1",
