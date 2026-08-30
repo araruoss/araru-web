@@ -1,0 +1,7 @@
+{
+  "mainChunkBytes": 460000,
+  "screenChunkBytes": 180000,
+  "readerShellBytes": 70000,
+  "cssBytes": 75000,
+  "allowedRegressionPercent": 30
+}

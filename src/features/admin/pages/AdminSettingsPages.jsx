@@ -1,0 +1,32 @@
+import { useEffect, useState } from 'react';
+import { toast } from 'react-hot-toast';
+import { api, apiErrorMessage } from '../../../lib/api.js';
+import { useLocale } from '../../../context/LocaleContext.jsx';
+import { AdminPage, Field, inputClass, SettingsGroup } from '../components/AdminPrimitives.jsx';
+import AdminTabs from '../components/AdminTabs.jsx';
+
+const timezones = ['UTC', 'America/Sao_Paulo', 'America/Fortaleza', 'America/Recife', 'America/Manaus', 'America/Belem', 'America/Bahia', 'America/New_York', 'America/Los_Angeles', 'Europe/Lisbon', 'Europe/London', 'Europe/Paris', 'Asia/Tokyo', 'Australia/Sydney'];
+const defaults = { libraryName: 'Araru', language: 'en', theme: 'dark', timezone: 'America/Sao_Paulo', dateFormat: 'locale', allowRegistration: false };
+
+function useSettings() {
+  const [settings, setSettings] = useState(defaults); const [initial, setInitial] = useState(defaults); const [status, setStatus] = useState('');
+  useEffect(() => { api.get('/admin/settings').then(({ data }) => { const value = { ...defaults, ...(data.data || {}) }; setSettings(value); setInitial(value); }).catch((error) => setStatus(apiErrorMessage(error))); }, []);
+  const dirty = JSON.stringify(settings) !== JSON.stringify(initial);
+  useEffect(() => { const handler = (event) => { if (dirty) { event.preventDefault(); event.returnValue = ''; } }; window.addEventListener('beforeunload', handler); return () => window.removeEventListener('beforeunload', handler); }, [dirty]);
+  const save = async () => { if (!dirty) return; setStatus('saving'); try { const { data } = await api.patch('/admin/settings', settings); const value = { ...defaults, ...(data.data || settings) }; setSettings(value); setInitial(value); setStatus('saved'); toast.success('Configurações atualizadas.'); window.location.reload(); } catch (error) { setStatus(apiErrorMessage(error)); toast.error('Não foi possível salvar as configurações.'); } };
+  return { settings, setSettings, dirty, status, save };
+}
+
+export function GeneralPage() {
+  const { t } = useLocale(); const form = useSettings(); const set = (key, value) => form.setSettings((current) => ({ ...current, [key]: value }));
+  return <AdminPage title={t('admin.sections.general')} description="Configure os padrões globais da instalação." actions={<button type="button" disabled={!form.dirty || form.status === 'saving'} onClick={form.save} className="min-h-11 rounded-xl bg-[var(--brand-primary)] px-5 text-sm font-semibold text-[var(--accent-foreground)] disabled:opacity-50">{form.status === 'saving' ? 'Salvando…' : 'Salvar alterações'}</button>}>
+    {form.dirty && <p role="status" className="mb-5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">Há alterações não salvas.</p>}
+    {form.status && form.status !== 'saving' && form.status !== 'saved' && <p role="alert" className="mb-5 text-sm text-[var(--danger)]">{form.status}</p>}
+    <AdminTabs tabs={['overview','application','interface','regional'].map((key) => [key, { overview: 'Visão geral', application: 'Aplicação', interface: 'Interface', regional: 'Regional' }[key]])}>{(tab) => <>
+      {tab === 'overview' && <section className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-panel)] p-4"><p className="text-xs text-[var(--text-muted)]">Nome da aplicação</p><strong className="mt-1 block">{form.settings.libraryName || '—'}</strong></div><div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-panel)] p-4"><p className="text-xs text-[var(--text-muted)]">Idioma padrão</p><strong className="mt-1 block">{form.settings.language === 'pt-BR' ? 'Português (Brasil)' : 'English'}</strong></div><div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-panel)] p-4"><p className="text-xs text-[var(--text-muted)]">Tema padrão</p><strong className="mt-1 block capitalize">{form.settings.theme || '—'}</strong></div><div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-panel)] p-4"><p className="text-xs text-[var(--text-muted)]">Timezone</p><strong className="mt-1 block">{form.settings.timezone || '—'}</strong></div></section>}
+      {tab === 'application' && <SettingsGroup title="Aplicação" description="Identidade pública exibida no acesso e na interface."><Field label="Nome da instalação" help="Nome exibido aos usuários."><input className={`${inputClass} !w-full`} style={{ maxWidth: '22rem' }} value={form.settings.libraryName || ''} maxLength={80} onChange={(event) => set('libraryName', event.target.value)} /></Field></SettingsGroup>}
+      {tab === 'interface' && <SettingsGroup title="Interface" description="Padrões visuais usados quando usuário e perfil não definirem preferência."><Field label="Tema padrão" help="Preferências individuais continuam tendo precedência."><select className={`${inputClass} max-w-[22rem]`} style={{ maxWidth: '22rem' }} value={form.settings.theme} onChange={(event) => set('theme', event.target.value)}><option value="system">Sistema</option><option value="light">Claro</option><option value="dark">Escuro</option></select></Field></SettingsGroup>}
+      {tab === 'regional' && <SettingsGroup title="Região e idioma" description="Padrões usados quando não houver preferência individual."><div className="grid gap-5 sm:grid-cols-2"><Field label="Idioma" help="Idioma padrão da instalação e da tela de login."><select className={`${inputClass} max-w-[22rem]`} style={{ maxWidth: '22rem' }} value={form.settings.language} onChange={(event) => set('language', event.target.value)}><option value="pt-BR">Português (Brasil)</option><option value="en">English</option></select></Field><Field label="Timezone" help="Use um identificador IANA."><select className={`${inputClass} max-w-[22rem]`} style={{ maxWidth: '22rem' }} value={form.settings.timezone} onChange={(event) => set('timezone', event.target.value)}>{timezones.map((zone) => <option key={zone}>{zone}</option>)}</select></Field><Field label="Formato de data" help="Formato usado nas datas administrativas."><select className={`${inputClass} max-w-[22rem]`} style={{ maxWidth: '22rem' }} value={form.settings.dateFormat} onChange={(event) => set('dateFormat', event.target.value)}><option value="locale">Formato regional</option><option value="iso">YYYY-MM-DD (ISO 8601)</option></select></Field></div></SettingsGroup>}
+    </>}</AdminTabs>
+  </AdminPage>;
+}

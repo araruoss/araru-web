@@ -1,0 +1,1 @@
+import fs from 'node:fs';import path from 'node:path';const root=path.resolve('dist/assets');const files=fs.readdirSync(root).map(name=>({name,bytes:fs.statSync(path.join(root,name)).size})).sort((a,b)=>b.bytes-a.bytes);console.table(files);console.log(`Total: ${(files.reduce((sum,file)=>sum+file.bytes,0)/1024/1024).toFixed(2)} MB`);

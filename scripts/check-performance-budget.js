@@ -1,0 +1,4 @@
+import fs from 'node:fs';import path from 'node:path';
+const root=path.resolve('dist/assets'),budget=JSON.parse(fs.readFileSync('performance-budget.json','utf8')),files=fs.readdirSync(root).map(name=>({name,size:fs.statSync(path.join(root,name)).size}));
+const find=(pattern)=>files.filter(file=>pattern.test(file.name)).sort((a,b)=>b.size-a.size)[0]||{name:'ausente',size:0};
+const assets={main:find(/^index-.*\.js$/),reader:find(/^Leitura-.*\.js$/),css:find(/\.css$/)};const limits={main:budget.mainChunkBytes*(1+budget.allowedRegressionPercent/100),reader:budget.readerShellBytes*(1+budget.allowedRegressionPercent/100),css:budget.cssBytes*(1+budget.allowedRegressionPercent/100)};const failures=Object.entries(assets).filter(([key,file])=>file.size>limits[key]);console.log(JSON.stringify({assets,limits},null,2));if(failures.length){console.error(`Performance budget excedido: ${failures.map(([key,file])=>`${key}=${file.size}`).join(', ')}`);process.exitCode=1;}
