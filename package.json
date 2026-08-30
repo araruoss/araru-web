@@ -1,6 +1,6 @@
 {
   "name": "@araru/web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -26,8 +26,8 @@
     "jszip": "^3.10.1",
     "lucide-react": "^0.468.0",
     "pdfjs-dist": "^6.2.108",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "react-hot-toast": "^2.4.1",
     "react-router-dom": "^7.18.2",
     "tailwind-merge": "^3.6.0"
