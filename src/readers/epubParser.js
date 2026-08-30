@@ -50,5 +50,5 @@ export async function parseEpub(buffer) {
     const corpo = documento.querySelector('body');
     if (corpo) secoes.push(`<section class="epub-secao">${corpo.innerHTML}</section>`);
   }
-  return `<style>${estilos.join('\n')}\n.epub-secao { width: 100%; }\n.epub-secao img, .epub-secao svg { width: 100% !important; max-width: 100% !important; height: auto !important; display: block; }</style>${secoes.join('\n')}`;
+  return `<style>${estilos.join('\n')}\n.epub-secao { width: 100%; }\n.epub-secao img, .epub-secao svg { width: var(--reader-media-width, 100%) !important; max-width: none !important; height: auto !important; display: block; }</style>${secoes.join('\n')}`;
 }

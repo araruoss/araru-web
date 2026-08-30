@@ -34,28 +34,52 @@ function mensagemErroApi(error) {
   return error.response.data?.message || `Erro ao carregar a biblioteca (${error.response.status}).`;
 }
 
-export function useLivros() {
+export function useLivros(filters = {}) {
   const queryClient = useQueryClient();
-  const catalog = useQuery({ queryKey: queryKeys.catalog, queryFn: ({ signal }) => fetchJson('/livros', { signal }) });
-  const categories = useQuery({ queryKey: queryKeys.categories, queryFn: ({ signal }) => fetchJson('/categorias', { signal }) });
-  const tree = useQuery({ queryKey: queryKeys.categoryTree, queryFn: ({ signal }) => fetchJson('/categorias/arvore', { signal }) });
+  const catalog = useQuery({
+    queryKey: queryKeys.works.list(filters),
+    queryFn: ({ signal }) => fetchJson('/works', { signal, params: { page: 1, pageSize: 100, sort: 'title', order: 'asc', ...filters } })
+  });
+  const livros = useMemo(() => (catalog.data?.items || catalog.data?.data || []).map((work) => ({
+    ...work,
+    nome: typeof (work.nome || work.canonical_title) === 'string' ? (work.nome || work.canonical_title) : 'Untitled work',
+    autor: Array.isArray(work.autor || work.authors) ? (work.autor || work.authors) : [],
+    formato: work.formato || work.format || '',
+    workId: work.workId || work.id,
+    categoria: work.categoria || work.category || '',
+    availableFormats: work.availableFormats || []
+  })), [catalog.data]);
+  const categories = useMemo(() => {
+    const counts = new Map();
+    for (const work of livros) {
+      for (const category of work.categoryPath || (work.category ? [work.category] : [])) {
+        if (category) counts.set(category, (counts.get(category) || 0) + 1);
+      }
+    }
+    return [...counts.entries()].map(([nome, total]) => ({ nome, total })).sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [livros]);
+  const tree = useMemo(() => {
+    const root = [];
+    for (const category of categories) {
+      const existing = root.find((item) => item.name === category.nome);
+      if (!existing) root.push({ name: category.nome, total: category.total, children: [] });
+    }
+    return root;
+  }, [categories]);
   const recarregar = useCallback(async () => {
-    await fetchJson('/livros', { params: { refresh: 'true' } });
-    await queryClient.invalidateQueries({ queryKey: queryKeys.catalog });
-    await queryClient.invalidateQueries({ queryKey: queryKeys.categories });
-    await queryClient.invalidateQueries({ queryKey: queryKeys.categoryTree });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.works.all });
   }, [queryClient]);
   const tentarNovamente = useCallback(async () => {
-    await Promise.allSettled([catalog.refetch(), categories.refetch(), tree.refetch()]);
-  }, [catalog, categories, tree]);
+    await catalog.refetch();
+  }, [catalog]);
 
   return {
-    livros: catalog.data?.data || [],
-    categorias: categories.data?.data || [],
-    arvoreCategorias: tree.data?.data || [],
-    loading: catalog.isPending || categories.isPending || tree.isPending,
-    refreshing: catalog.isFetching || categories.isFetching || tree.isFetching,
-    error: [catalog.error, categories.error, tree.error].find(Boolean) ? apiErrorMessage([catalog.error, categories.error, tree.error].find(Boolean), 'Erro ao carregar a biblioteca') : '',
+    livros,
+    categorias: categories,
+    arvoreCategorias: tree,
+    loading: catalog.isPending,
+    refreshing: catalog.isFetching,
+    error: catalog.error ? apiErrorMessage(catalog.error, 'Erro ao carregar a biblioteca') : '',
     recarregar,
     tentarNovamente
   };

@@ -1,8 +1,5 @@
 import { applyReadingState, getLocalReadingState } from './localStorage.js';
-import { apiFetch } from '../lib/api.js';
-
 let timer;
-let syncing = false;
 
 function mergeById(local = [], remote = []) {
   const items = new Map();
@@ -28,34 +25,16 @@ export function mergeReadingStates(local, remote) {
     history: mergeById(local.history, remote.history),
     progress: mergeProgress(local.progress, remote.progress),
     stats: localIsNewer ? local.stats : remote.stats,
+    version: Math.max(Number(local.version || 0), Number(remote.version || 0)),
     clientUpdatedAt: Math.max(Number(local.clientUpdatedAt || 0), Number(remote.clientUpdatedAt || 0), Date.now())
   };
 }
 
-async function request(path = '', options = {}) {
-  const response = await apiFetch(`/reading-state${path}`, {
-    headers: { 'Content-Type': 'application/json' }, ...options
-  });
-  if (!response.ok) throw new Error(`reading_sync_${response.status}`);
-  return response.json();
-}
-
 export async function syncReadingState({ hydrate = false } = {}) {
-  if (syncing || typeof fetch !== 'function') return;
-  syncing = true;
-  try {
-    const local = getLocalReadingState();
-    let merged = local;
-    if (hydrate) {
-      const remote = (await request()).data || {};
-      merged = mergeReadingStates(local, remote);
-      applyReadingState(merged);
-    }
-    await request('', { method: 'PUT', body: JSON.stringify(merged) });
-  } catch {
-    // Offline, backend antigo ou sessão ainda não autenticada: localStorage
-    // permanece como fonte funcional e uma próxima alteração tenta novamente.
-  } finally { syncing = false; }
+  // The v1 server exposes reading state per work/profile, not a global
+  // aggregate endpoint. Keep the aggregate local until a matching contract
+  // is introduced; this avoids silently calling a legacy route.
+  if (hydrate) applyReadingState(getLocalReadingState());
 }
 
 export function startReadingStateSync() {

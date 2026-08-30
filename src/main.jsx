@@ -36,15 +36,15 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <TemaProvider>
-        <LocaleProvider>
-          <QueryClientProvider client={queryClient}>
-            <AppErrorBoundary><AccessGate><App /></AccessGate></AppErrorBoundary>
-          </QueryClientProvider>
-          <Toaster position="bottom-right" toastOptions={{ duration: 2200 }} />
-        </LocaleProvider>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <LocaleProvider>
+            <QueryClientProvider client={queryClient}>
+              <AppErrorBoundary><AccessGate><App /></AccessGate></AppErrorBoundary>
+            </QueryClientProvider>
+            <Toaster position="bottom-right" toastOptions={{ duration: 2200 }} />
+          </LocaleProvider>
+        </BrowserRouter>
       </TemaProvider>
-    </BrowserRouter>
   </React.StrictMode>
 );

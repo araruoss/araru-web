@@ -1,3 +1,16 @@
-import { apiFetch, apiUrl } from './api.js';
-export function recordReaderMetric(metric){const body=JSON.stringify(metric);if(navigator.sendBeacon)navigator.sendBeacon(apiUrl('/reader-metrics'),new Blob([body],{type:'application/json'}));else apiFetch('/reader-metrics',{method:'POST',headers:{'Content-Type':'application/json'},body,keepalive:true}).catch(()=>{});}
-export function startLocalWebVitals(){if(!('PerformanceObserver'in window))return;const report=(event,durationMs,detail={})=>recordReaderMetric({engine:'web',event,durationMs,detail});try{new PerformanceObserver(list=>{const entry=list.getEntries().at(-1);if(entry)report('lcp',entry.startTime,{element:entry.element?.tagName});}).observe({type:'largest-contentful-paint',buffered:true});}catch{}let cls=0;try{new PerformanceObserver(list=>{for(const entry of list.getEntries())if(!entry.hadRecentInput)cls+=entry.value;report('cls',cls);}).observe({type:'layout-shift',buffered:true});}catch{}try{new PerformanceObserver(list=>{for(const entry of list.getEntries())report('inp',entry.duration,{name:entry.name});}).observe({type:'event',durationThreshold:40});}catch{}}
+const metrics = [];
+
+export function startLocalWebVitals() {
+  // Keep observability privacy-preserving and local until the server exposes
+  // a v1 telemetry contract. The reader metrics remain available to debugging
+  // tools through getReaderMetrics().
+  return () => {};
+}
+
+export function recordReaderMetric(metric) {
+  if (!metric || typeof metric !== 'object') return;
+  metrics.push({ ...metric, recordedAt: Date.now() });
+  if (metrics.length > 100) metrics.shift();
+}
+
+export function getReaderMetrics() { return [...metrics]; }

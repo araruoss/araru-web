@@ -1,8 +1,8 @@
 export const READER_CAPABILITIES = Object.freeze({
-  pdf: Object.freeze({ pagination: true, continuous: true, zoom: true, typography: false, webtoon: false, pageAnimation: false }),
-  comic: Object.freeze({ pagination: true, continuous: true, zoom: true, typography: false, webtoon: true, pageAnimation: false }),
-  epub: Object.freeze({ pagination: false, continuous: true, zoom: true, typography: true, webtoon: false, pageAnimation: false }),
-  mobi: Object.freeze({ pagination: false, continuous: true, zoom: true, typography: true, webtoon: false, pageAnimation: false })
+  pdf: Object.freeze({ pagination: true, continuous: true, zoom: true, pageZoom: true, fitPage: true, fitWidth: true, fontScale: false, pan: true, webtoon: false, pageAnimation: false }),
+  comic: Object.freeze({ pagination: true, continuous: true, zoom: true, pageZoom: true, fitPage: true, fitWidth: true, fontScale: false, pan: true, webtoon: true, pageAnimation: false }),
+  epub: Object.freeze({ pagination: false, continuous: true, zoom: true, pageZoom: false, fitPage: false, fitWidth: false, fontScale: true, typography: true, pan: false, webtoon: false, pageAnimation: false }),
+  mobi: Object.freeze({ pagination: false, continuous: true, zoom: true, pageZoom: false, fitPage: false, fitWidth: false, fontScale: true, typography: true, pan: false, webtoon: false, pageAnimation: false })
 });
 
 export function engineNameFor(format = '') {

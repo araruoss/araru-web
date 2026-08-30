@@ -5,7 +5,10 @@ import { useLivros } from '../hooks/useLivros.js';
 import { useFeatureFlags } from '../hooks/useFeatureFlags.js';
 import { adicionarUltimoLido, getReadingProgress, saveReadingProgress } from '../utils/localStorage.js';
 import { ReaderDock, ReaderErrorBoundary, ReaderSettings as ReaderOptions, ReaderShell } from '../components/reader/ReaderShell.jsx';
+import { ReaderZoomControls } from '../components/reader/ReaderZoomControls.jsx';
 import { adaptivePrefetchWindow, capabilitiesFor, engineNameFor } from '../readers/core.js';
+import { calculatePdfScale } from '../readers/zoom.js';
+import { useReaderZoom } from '../readers/useReaderZoom.js';
 import { recordReaderMetric } from '../lib/telemetry.js';
 import { backendUrl, bookContentUrl, bookPagesUrl } from '../lib/api.js';
 import { useLocale } from '../context/LocaleContext.jsx';
@@ -89,6 +92,19 @@ function useReaderControls(delay = 3200) {
   }, [showControls]);
 
   return { controlsVisible, showControls, hideControls, toggleControls };
+}
+
+function detectarFormato(livro = {}) {
+  livro = livro || {};
+  const supported = ['pdf', 'epub', 'mobi', 'cbz', 'cbr'];
+  const candidates = [livro.formato, livro.extension, livro.originalFilename, livro.filename, livro.files?.[0]?.formato, livro.files?.[0]?.extension];
+  for (const candidate of candidates) {
+    const value = String(candidate || '').toLowerCase().replace(/^\./, '').trim();
+    if (supported.includes(value)) return value;
+    const extension = value.match(/\.(pdf|epub|mobi|cbz|cbr)$/)?.[1];
+    if (extension) return extension;
+  }
+  return '';
 }
 
 function getPageTurnMode(livroId) {
@@ -266,16 +282,11 @@ function usePageTurn({ enabled, currentPage, pageCount, viewportWidth, mode, red
   };
 }
 
-function getReaderLayout(baseViewport, viewport, zoom) {
+function getReaderLayout(baseViewport, viewport, zoom, zoomMode = 'fit-width') {
   const desktop = (viewport.width || 0) >= 640;
   const larguraDisponivel = Math.max(280, (viewport.width || 900) - (desktop ? 48 : 8));
   const alturaDisponivel = Math.max(240, (viewport.height || 700) - (desktop ? 40 : 8));
-  const escalaPorLargura = larguraDisponivel / baseViewport.width;
-  const modoFit = desktop || baseViewport.height * escalaPorLargura <= alturaDisponivel ? 'page' : 'width';
-  const escalaBase = modoFit === 'page'
-    ? Math.min(escalaPorLargura, alturaDisponivel / baseViewport.height)
-    : escalaPorLargura;
-  const scale = Math.min(escalaBase * zoom, 4);
+  const scale = calculatePdfScale({ baseWidth: baseViewport.width, baseHeight: baseViewport.height, viewportWidth: larguraDisponivel, viewportHeight: alturaDisponivel, mode: zoomMode, zoom });
   const cssViewport = {
     width: baseViewport.width * scale,
     height: baseViewport.height * scale
@@ -416,7 +427,6 @@ function PdfReader({ livro, url, onError, telaCheia, onToggleTelaCheia, onExit }
   const cacheTasksRef = useRef(new Map());
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(0);
-  const [zoom, setZoom] = useState(1);
   const [loadingPage, setLoadingPage] = useState(true);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [pageLayout, setPageLayout] = useState({ width: 0, height: 0 });
@@ -426,6 +436,10 @@ function PdfReader({ livro, url, onError, telaCheia, onToggleTelaCheia, onExit }
   const [menuAberto, setMenuAberto] = useState(false);
   const pinchRef = useRef(null);
   const reducedMotion = useReducedMotion();
+  const savedVisual = getReadingProgress(livro.id);
+  const zoomController = useReaderZoom({ format: 'pdf', defaultZoom: Number(savedVisual?.zoom || 1), defaultMode: savedVisual?.zoom && Number(savedVisual.zoom) !== 1 ? 'custom' : 'fit-width', min: 0.75, max: 4 });
+  const readerCapabilities = capabilitiesFor('pdf');
+  const { zoom, mode: zoomMode, interactionProps: zoomInteractionProps } = zoomController;
   const { controlsVisible: controlesVisiveis, showControls: mostrarControles, toggleControls } = useReaderControls();
 
   const limparPdf = useCallback(() => {
@@ -459,7 +473,7 @@ function PdfReader({ livro, url, onError, telaCheia, onToggleTelaCheia, onExit }
   const renderizarPaginaNoCanvas = useCallback(async (pdf, pageNumber, targetCanvas) => {
     const pdfPage = await pdf.getPage(pageNumber);
     const baseViewport = pdfPage.getViewport({ scale: 1 });
-    const layout = getReaderLayout(baseViewport, viewport, zoom);
+    const layout = getReaderLayout(baseViewport, viewport, zoom, zoomMode);
     const pageViewport = pdfPage.getViewport({ scale: layout.scale });
     targetCanvas.width = layout.pixelWidth;
     targetCanvas.height = layout.pixelHeight;
@@ -471,7 +485,7 @@ function PdfReader({ livro, url, onError, telaCheia, onToggleTelaCheia, onExit }
     await renderTask.promise;
     descartarRecurso(pdfPage, 'cleanup', 'liberando página do PDF em cache');
     return { layout, canvas: targetCanvas };
-  }, [viewport, zoom]);
+  }, [viewport, zoom, zoomMode]);
 
   const clonarCanvas = useCallback((sourceCanvas, layout) => {
     const clone = document.createElement('canvas');
@@ -510,7 +524,7 @@ function PdfReader({ livro, url, onError, telaCheia, onToggleTelaCheia, onExit }
   }, [pageCount, renderizarPaginaNoCanvas]);
 
   const pageTurn = usePageTurn({
-    enabled: zoom <= 1.02 && !loadingPage && pageCount > 0 && viewport.width > 0,
+    enabled: (zoomMode !== 'custom' || zoom <= 1.02) && !loadingPage && pageCount > 0 && viewport.width > 0,
     currentPage: page,
     pageCount,
     viewportWidth: pageLayout.width || viewport.width || 1,
@@ -530,7 +544,6 @@ function PdfReader({ livro, url, onError, telaCheia, onToggleTelaCheia, onExit }
     limparPdf();
     const saved = getReadingProgress(livro.id);
     setPage(Math.max(1, Number(saved?.page || 1)));
-    setZoom(Number(saved?.zoom || 1));
     setPageCount(0);
     const controller = new AbortController();
     requestControllerRef.current = controller;
@@ -582,7 +595,7 @@ function PdfReader({ livro, url, onError, telaCheia, onToggleTelaCheia, onExit }
         descartarRecurso(pdfPage, 'cleanup', 'liberando página PDF cancelada');
         return;
       }
-      const layout = getReaderLayout(pdfPage.getViewport({ scale: 1 }), viewport, zoom);
+      const layout = getReaderLayout(pdfPage.getViewport({ scale: 1 }), viewport, zoom, zoomMode);
       const pageViewport = pdfPage.getViewport({ scale: layout.scale });
       canvas.width = layout.pixelWidth;
       canvas.height = layout.pixelHeight;
@@ -617,7 +630,7 @@ function PdfReader({ livro, url, onError, telaCheia, onToggleTelaCheia, onExit }
       renderTaskRef.current = null;
       descartarRecurso(renderTask, 'cancel', 'cancelando renderização ativa');
     };
-  }, [onError, page, pageCount, viewport.height, viewport.width, zoom]);
+  }, [onError, page, pageCount, viewport.height, viewport.width, zoom, zoomMode]);
 
   useEffect(() => {
     if (!pageCount || !pdfDocumentRef.current || !pageLayout.width) return undefined;
@@ -650,8 +663,8 @@ function PdfReader({ livro, url, onError, telaCheia, onToggleTelaCheia, onExit }
     if (event.touches.length !== 2 || !pinchRef.current) return;
     const [a, b] = event.touches;
     const distancia = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-    const proximoZoom = Math.min(3, Math.max(.7, pinchRef.current.zoom * (distancia / pinchRef.current.distance)));
-    setZoom(proximoZoom);
+    const proximoZoom = pinchRef.current.zoom * (distancia / pinchRef.current.distance);
+    zoomController.setZoom(proximoZoom);
   };
 
   const aoToqueNaPagina = (event) => {
@@ -698,6 +711,7 @@ function PdfReader({ livro, url, onError, telaCheia, onToggleTelaCheia, onExit }
       onPointerUp={pageTurn.onPointerUp}
       onPointerCancel={pageTurn.onPointerCancel}
       className="reader-viewport flex h-full flex-col items-center overflow-auto bg-white p-0 sm:bg-slate-900 sm:p-4"
+      {...zoomInteractionProps}
       style={{ touchAction: zoom > 1 ? 'pan-x pan-y pinch-zoom' : 'pan-y pinch-zoom' }}
     >
       <div
@@ -708,16 +722,15 @@ function PdfReader({ livro, url, onError, telaCheia, onToggleTelaCheia, onExit }
           perspective: 'none'
         }}
       >
-        <canvas ref={canvasRef} className="relative max-w-full bg-white sm:shadow-xl" />
+        <canvas ref={canvasRef} className="relative bg-white sm:shadow-xl" />
       </div>
 
       {loadingPage && <p className="pointer-events-none fixed left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-950/70 px-3 py-2 text-xs text-white/80">{t('reader.rendering')}</p>}
-      {controlesVisiveis && <>
-        <div className="reader-toolbar fixed left-1/2 z-30 flex max-w-[calc(100vw-24px)] -translate-x-1/2 items-center gap-1 rounded-[1.35rem] border border-white/15 bg-slate-950/65 p-1.5 text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)] backdrop-blur-xl" style={{ bottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
-          {seletorPaginaAberto ? <form onSubmit={irParaPagina} className="flex items-center gap-2"><input autoFocus value={paginaDestino} onChange={(event) => setPaginaDestino(event.target.value)} inputMode="numeric" aria-label="Número da página" className="h-11 w-16 rounded-[1rem] bg-white/10 px-2 text-center outline-none" /><span className="whitespace-nowrap text-sm text-white/60">de {pageCount}</span><button className="h-11 rounded-[1rem] bg-white px-4 text-sm font-semibold text-slate-950">Ir</button><button type="button" onClick={() => { setSeletorPaginaAberto(false); mostrarControles(); }} className="grid h-11 w-11 place-items-center rounded-[1rem] hover:bg-white/12" aria-label="Cancelar"><X className="h-4 w-4" /></button></form> : <><button type="button" disabled={page <= 1 || pageTurn.turn.phase !== 'idle'} onClick={() => navegarPagina('previous')} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12 disabled:opacity-35" aria-label="Página anterior"><ChevronLeft /></button><button type="button" onClick={() => { mostrarControles(); setSeletorPaginaAberto(true); }} className="min-w-[88px] whitespace-nowrap px-2 text-sm font-medium tabular-nums" aria-label="Ir para página">{page} / {pageCount || '…'}</button><button type="button" disabled={!pageCount || page >= pageCount || pageTurn.turn.phase !== 'idle'} onClick={() => navegarPagina('next')} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12 disabled:opacity-35" aria-label="Próxima página"><ChevronRight /></button><span className="mx-0.5 h-6 w-px bg-white/15" /><button type="button" onClick={onExit} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Fechar livro" title="Fechar livro"><X className="h-4 w-4" /></button></>}
-        </div>
-      </>}
-      {menuAberto && <div className="fixed inset-0 z-40 flex items-end bg-black/35 p-3" onClick={() => setMenuAberto(false)}><div className="w-full rounded-2xl bg-slate-950 p-4 text-white shadow-2xl" onClick={(event) => event.stopPropagation()}><p className="mb-3 text-sm font-semibold">Leitura</p><div className="flex items-center justify-between py-2"><span className="text-sm text-white/70">Zoom</span><div className="flex items-center gap-2"><button type="button" onClick={() => setZoom((value) => Math.max(.7, value - .2))} className="grid h-11 w-11 place-items-center rounded-xl bg-white/10" aria-label="Diminuir zoom">−</button><span className="w-14 text-center text-sm tabular-nums">{Math.round(zoom * 100)}%</span><button type="button" onClick={() => setZoom((value) => Math.min(3, value + .2))} className="grid h-11 w-11 place-items-center rounded-xl bg-white/10" aria-label="Aumentar zoom">+</button></div></div><button type="button" onClick={onToggleTelaCheia} className="mt-2 flex h-11 w-full items-center justify-between rounded-xl px-3 text-sm hover:bg-white/10"><span>Tela cheia</span>{telaCheia ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}</button></div></div>}
+      {controlesVisiveis && <ReaderDock>
+        {seletorPaginaAberto ? <form onSubmit={irParaPagina} className="flex items-center gap-2"><input autoFocus value={paginaDestino} onChange={(event) => setPaginaDestino(event.target.value)} inputMode="numeric" aria-label="Número da página" className="h-11 w-16 rounded-[1rem] bg-white/10 px-2 text-center outline-none" /><span className="whitespace-nowrap text-sm text-white/60">de {pageCount}</span><button className="h-11 rounded-[1rem] bg-white px-4 text-sm font-semibold text-slate-950">Ir</button><button type="button" onClick={() => { setSeletorPaginaAberto(false); mostrarControles(); }} className="grid h-11 w-11 rounded-[1rem] place-items-center hover:bg-white/12" aria-label="Cancelar"><X className="h-4 w-4" /></button></form> : <div className="flex items-center gap-1"><button type="button" disabled={page <= 1 || pageTurn.turn.phase !== 'idle'} onClick={() => navegarPagina('previous')} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12 disabled:opacity-35" aria-label="Página anterior"><ChevronLeft /></button><button type="button" onClick={() => { mostrarControles(); setSeletorPaginaAberto(true); }} className="min-w-[88px] whitespace-nowrap px-2 text-sm font-medium tabular-nums" aria-label="Ir para página">{page} / {pageCount || '…'}</button><button type="button" disabled={!pageCount || page >= pageCount || pageTurn.turn.phase !== 'idle'} onClick={() => navegarPagina('next')} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12 disabled:opacity-35" aria-label="Próxima página"><ChevronRight /></button><span className="mx-0.5 h-6 w-px bg-white/15" /><button type="button" onClick={onExit} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Fechar livro" title="Fechar livro"><X className="h-4 w-4" /></button></div>}
+        <ReaderZoomControls capabilities={readerCapabilities} zoom={zoom} mode={zoomMode} onZoomIn={zoomController.zoomIn} onZoomOut={zoomController.zoomOut} onReset={zoomController.resetZoom} onFitWidth={() => zoomController.setFitMode('fit-width')} onFitPage={() => zoomController.setFitMode('fit-page')} className="w-full border-t border-white/10 pt-1 sm:w-auto sm:border-l sm:border-t-0 sm:pl-1 sm:pt-0" />
+      </ReaderDock>}
+      {menuAberto && <div className="fixed inset-0 z-40 flex items-end bg-black/35 p-3" onClick={() => setMenuAberto(false)}><div className="w-full rounded-2xl bg-slate-950 p-4 text-white shadow-2xl" onClick={(event) => event.stopPropagation()}><p className="mb-3 text-sm font-semibold">Leitura</p><ReaderZoomControls capabilities={readerCapabilities} zoom={zoom} mode={zoomMode} onZoomIn={zoomController.zoomIn} onZoomOut={zoomController.zoomOut} onReset={zoomController.resetZoom} onFitWidth={() => zoomController.setFitMode('fit-width')} onFitPage={() => zoomController.setFitMode('fit-page')} className="w-full justify-center" /><button type="button" onClick={onToggleTelaCheia} className="mt-2 flex h-11 w-full items-center justify-between rounded-xl px-3 text-sm hover:bg-white/10"><span>Tela cheia</span>{telaCheia ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}</button></div></div>}
     </div>
   );
 }
@@ -726,7 +739,8 @@ function EpubReader({ livro, html, telaCheia, onToggleTelaCheia, onExit }) {
   const { t } = useLocale();
   const shellRef = useRef(null);
   const restoredRef = useRef('');
-  const [zoom, setZoom] = useState(() => Number(getReadingProgress(livro.id)?.zoom || 1));
+  const zoomController = useReaderZoom({ format: 'epub', defaultZoom: Number(getReadingProgress(livro.id)?.zoom || 1), min: 0.8, max: 2 });
+  const { zoom, interactionProps: zoomInteractionProps } = zoomController;
   const [progress, setProgress] = useState(() => Number(getReadingProgress(livro.id)?.progress || 0));
   const [menuAberto, setMenuAberto] = useState(false);
   const [lineHeight, setLineHeight] = useState(() => Number(getReadingProgress(livro.id)?.lineHeight || 1.8));
@@ -779,18 +793,17 @@ function EpubReader({ livro, html, telaCheia, onToggleTelaCheia, onExit }) {
   }, [navegar]);
 
   return (
-    <div ref={shellRef} onScroll={(event) => salvarPosicao(event.currentTarget)} className="reader-viewport h-full overflow-y-auto sm:p-4" style={{ backgroundColor: textTheme.background }}>
-      <article onClick={(event) => { if (!event.target.closest('a, button, input, select')) toggleControls(); }} className="mx-auto min-h-full w-full max-w-5xl px-4 py-4 sm:rounded-xl sm:p-10 sm:shadow-xl [&_.epub-secao]:mb-8 [&_img]:h-auto [&_img]:max-w-full" style={{ fontSize: `${1.05 * zoom}rem`, lineHeight, backgroundColor: textTheme.background, color: textTheme.color }} dangerouslySetInnerHTML={{ __html: html || '<p>Carregando EPUB...</p>' }} />
+    <div ref={shellRef} onScroll={(event) => salvarPosicao(event.currentTarget)} {...zoomInteractionProps} className="reader-viewport h-full overflow-auto sm:p-4" style={{ backgroundColor: textTheme.background }}>
+      <article onClick={(event) => { if (!event.target.closest('a, button, input, select')) toggleControls(); }} className="mx-auto min-h-full w-full max-w-5xl px-4 py-4 sm:rounded-xl sm:p-10 sm:shadow-xl [&_.epub-secao]:mb-8 [&_img]:h-auto" style={{ fontSize: `${1.05 * zoom}rem`, lineHeight, backgroundColor: textTheme.background, color: textTheme.color, '--reader-media-width': `${100 * zoom}%` }} dangerouslySetInnerHTML={{ __html: html || '<p>Carregando EPUB...</p>' }} />
       {controlsVisible && <ReaderDock>
-        <button type="button" onClick={() => navegar(-1)} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Trecho anterior"><ChevronLeft /></button>
+        <div className="flex items-center gap-1"><button type="button" onClick={() => navegar(-1)} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Trecho anterior"><ChevronLeft /></button>
         <span className="min-w-[88px] px-2 text-center text-sm font-medium tabular-nums">{Math.round(progress * 100)}%</span>
-        <button type="button" onClick={() => navegar(1)} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Próximo trecho"><ChevronRight /></button>
-        <span className="mx-0.5 h-6 w-px bg-white/15" />
-        <button type="button" onClick={onExit} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Fechar livro"><X className="h-4 w-4" /></button>
+        <button type="button" onClick={() => navegar(1)} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Próximo trecho"><ChevronRight /></button><button type="button" onClick={onExit} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Fechar livro"><X className="h-4 w-4" /></button></div>
+        <ReaderZoomControls capabilities={capabilitiesFor('epub')} zoom={zoom} onZoomIn={zoomController.zoomIn} onZoomOut={zoomController.zoomOut} onReset={zoomController.resetZoom} className="w-full border-t border-white/10 pt-1 sm:w-auto sm:border-l sm:border-t-0 sm:pl-1 sm:pt-0" />
       </ReaderDock>}
       <ReaderOptions open={menuAberto} onClose={() => { setMenuAberto(false); showControls(); }}>
         <p className="mb-3 text-sm font-semibold">Leitura</p>
-        <div className="flex items-center justify-between py-2"><span className="text-sm text-white/70">Tamanho do texto</span><div className="flex items-center gap-2"><button type="button" onClick={() => setZoom((value) => Math.max(.7, value - .1))} className="grid h-11 w-11 place-items-center rounded-xl bg-white/10" aria-label="Diminuir texto">−</button><span className="w-14 text-center text-sm tabular-nums">{Math.round(zoom * 100)}%</span><button type="button" onClick={() => setZoom((value) => Math.min(1.6, value + .1))} className="grid h-11 w-11 place-items-center rounded-xl bg-white/10" aria-label="Aumentar texto">+</button></div></div>
+        <ReaderZoomControls capabilities={capabilitiesFor('epub')} zoom={zoom} onZoomIn={zoomController.zoomIn} onZoomOut={zoomController.zoomOut} onReset={zoomController.resetZoom} className="w-full justify-center" />
         <label className="mt-2 flex items-center justify-between gap-3 text-sm text-white/70"><span>Espaçamento</span><select value={lineHeight} onChange={(event) => setLineHeight(Number(event.target.value))} className="h-10 rounded-xl bg-white/10 px-3 text-white outline-none"><option value="1.5" className="text-slate-900">Compacto</option><option value="1.8" className="text-slate-900">Normal</option><option value="2.1" className="text-slate-900">Confortável</option></select></label>
         <label className="mt-3 flex items-center justify-between gap-3 text-sm text-white/70"><span>Tema</span><select value={theme} onChange={(event) => setTheme(event.target.value)} className="h-10 rounded-xl bg-white/10 px-3 text-white outline-none"><option value="claro" className="text-slate-900">Claro</option><option value="sepia" className="text-slate-900">Sépia</option><option value="escuro" className="text-slate-900">Escuro</option></select></label>
         <button type="button" onClick={onToggleTelaCheia} className="mt-2 flex h-11 w-full items-center justify-between rounded-xl px-3 text-sm hover:bg-white/10"><span>Tela cheia</span>{telaCheia ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}</button>
@@ -799,13 +812,14 @@ function EpubReader({ livro, html, telaCheia, onToggleTelaCheia, onExit }) {
   );
 }
 
-function MobiReader({ livro, html, telaCheia, onToggleTelaCheia, onExit }) {
+function MobiReader({ livro, html, status = 'idle', error = '', onRetry, telaCheia, onToggleTelaCheia, onExit }) {
   const { t } = useLocale();
   const shellRef = useRef(null);
   const restoredRef = useRef('');
   const [menuAberto, setMenuAberto] = useState(false);
   const [progress, setProgress] = useState(() => Number(getReadingProgress(livro.id)?.progress || 0));
-  const [zoom, setZoom] = useState(() => Number(getReadingProgress(livro.id)?.zoom || 1));
+  const zoomController = useReaderZoom({ format: 'mobi', defaultZoom: Number(getReadingProgress(livro.id)?.zoom || 1), min: 0.8, max: 2 });
+  const { zoom, interactionProps: zoomInteractionProps } = zoomController;
   const [lineHeight, setLineHeight] = useState(() => Number(getReadingProgress(livro.id)?.lineHeight || 1.8));
   const [theme, setTheme] = useState(() => getReadingProgress(livro.id)?.theme || 'claro');
   const { controlsVisible, showControls, toggleControls } = useReaderControls();
@@ -842,23 +856,23 @@ function MobiReader({ livro, html, telaCheia, onToggleTelaCheia, onExit }) {
   }, []);
 
   return (
-    <div ref={shellRef} onScroll={(event) => salvarPosicao(event.currentTarget)} className="reader-viewport h-full overflow-y-auto sm:p-4" style={{ backgroundColor: textTheme.background }}>
-      <article onClick={(event) => { if (!event.target.closest('a, button, input, select')) toggleControls(); }} className="mobi-conteudo mx-auto min-h-full w-full max-w-5xl px-4 py-4 sm:rounded-xl sm:p-10 sm:shadow-xl" style={{ fontSize: `${1.05 * zoom}rem`, lineHeight, backgroundColor: textTheme.background, color: textTheme.color }} dangerouslySetInnerHTML={{ __html: html || '<p>Renderizando MOBI...</p>' }} />
+    <div ref={shellRef} onScroll={(event) => salvarPosicao(event.currentTarget)} {...zoomInteractionProps} className="reader-viewport h-full overflow-auto sm:p-4" style={{ backgroundColor: textTheme.background }}>
+      {status === 'error' ? <section role="alert" className="grid min-h-full place-items-center p-6 text-center text-white"><div><p className="font-semibold">{t('reader.mobiFailed')}</p><p className="mt-2 max-w-md text-sm text-white/65">{error || t('reader.mobiEmpty')}</p><button type="button" onClick={onRetry} className="mt-5 inline-flex min-h-11 items-center rounded-full bg-white px-4 text-sm font-semibold text-slate-950">{t('common.retry')}</button><button type="button" onClick={onExit} className="ml-2 min-h-11 rounded-full border border-white/20 px-4 text-sm">{t('common.back')}</button></div></section> : <article onClick={(event) => { if (!event.target.closest('a, button, input, select')) toggleControls(); }} className="mobi-conteudo mx-auto min-h-full w-full max-w-5xl px-4 py-4 sm:rounded-xl sm:p-10 sm:shadow-xl" style={{ fontSize: `${1.05 * zoom}rem`, lineHeight, backgroundColor: textTheme.background, color: textTheme.color, '--reader-media-width': `${100 * zoom}%` }} dangerouslySetInnerHTML={{ __html: html || `<p>${t('reader.mobiLoading')}</p>` }} />}
       {controlsVisible && <ReaderDock>
-        <button type="button" onClick={() => navegar(-1)} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Trecho anterior"><ChevronLeft /></button>
+        <div className="flex items-center gap-1"><button type="button" onClick={() => navegar(-1)} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Trecho anterior"><ChevronLeft /></button>
         <span className="min-w-[88px] px-2 text-center text-sm font-medium tabular-nums">{Math.round(progress * 100)}%</span>
-        <button type="button" onClick={() => navegar(1)} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Próximo trecho"><ChevronRight /></button>
-        <span className="mx-0.5 h-6 w-px bg-white/15" />
-        <button type="button" onClick={onExit} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Fechar livro"><X className="h-4 w-4" /></button>
+        <button type="button" onClick={() => navegar(1)} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Próximo trecho"><ChevronRight /></button><button type="button" onClick={onExit} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Fechar livro"><X className="h-4 w-4" /></button></div>
+        <ReaderZoomControls capabilities={capabilitiesFor('mobi')} zoom={zoom} onZoomIn={zoomController.zoomIn} onZoomOut={zoomController.zoomOut} onReset={zoomController.resetZoom} className="w-full border-t border-white/10 pt-1 sm:w-auto sm:border-l sm:border-t-0 sm:pl-1 sm:pt-0" />
       </ReaderDock>}
-      <ReaderOptions open={menuAberto} onClose={() => { setMenuAberto(false); showControls(); }}><p className="mb-3 text-sm font-semibold">Leitura</p><div className="flex items-center justify-between py-2"><span className="text-sm text-white/70">Tamanho do texto</span><div className="flex items-center gap-2"><button type="button" onClick={() => setZoom((value) => Math.max(.7, value - .1))} className="grid h-11 w-11 place-items-center rounded-xl bg-white/10" aria-label="Diminuir texto">−</button><span className="w-14 text-center text-sm tabular-nums">{Math.round(zoom * 100)}%</span><button type="button" onClick={() => setZoom((value) => Math.min(1.6, value + .1))} className="grid h-11 w-11 place-items-center rounded-xl bg-white/10" aria-label="Aumentar texto">+</button></div></div><label className="mt-2 flex items-center justify-between gap-3 text-sm text-white/70"><span>Espaçamento</span><select value={lineHeight} onChange={(event) => setLineHeight(Number(event.target.value))} className="h-10 rounded-xl bg-white/10 px-3 text-white outline-none"><option value="1.5" className="text-slate-900">Compacto</option><option value="1.8" className="text-slate-900">Normal</option><option value="2.1" className="text-slate-900">Confortável</option></select></label><label className="mt-3 flex items-center justify-between gap-3 text-sm text-white/70"><span>Tema</span><select value={theme} onChange={(event) => setTheme(event.target.value)} className="h-10 rounded-xl bg-white/10 px-3 text-white outline-none"><option value="claro" className="text-slate-900">Claro</option><option value="sepia" className="text-slate-900">Sépia</option><option value="escuro" className="text-slate-900">Escuro</option></select></label><button type="button" onClick={onToggleTelaCheia} className="mt-2 flex h-11 w-full items-center justify-between rounded-xl px-3 text-sm hover:bg-white/10"><span>Tela cheia</span>{telaCheia ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}</button></ReaderOptions>
+      <ReaderOptions open={menuAberto} onClose={() => { setMenuAberto(false); showControls(); }}><p className="mb-3 text-sm font-semibold">Leitura</p><ReaderZoomControls capabilities={capabilitiesFor('mobi')} zoom={zoom} onZoomIn={zoomController.zoomIn} onZoomOut={zoomController.zoomOut} onReset={zoomController.resetZoom} className="w-full justify-center" /><label className="mt-2 flex items-center justify-between gap-3 text-sm text-white/70"><span>Espaçamento</span><select value={lineHeight} onChange={(event) => setLineHeight(Number(event.target.value))} className="h-10 rounded-xl bg-white/10 px-3 text-white outline-none"><option value="1.5" className="text-slate-900">Compacto</option><option value="1.8" className="text-slate-900">Normal</option><option value="2.1" className="text-slate-900">Confortável</option></select></label><label className="mt-3 flex items-center justify-between gap-3 text-sm text-white/70"><span>Tema</span><select value={theme} onChange={(event) => setTheme(event.target.value)} className="h-10 rounded-xl bg-white/10 px-3 text-white outline-none"><option value="claro" className="text-slate-900">Claro</option><option value="sepia" className="text-slate-900">Sépia</option><option value="escuro" className="text-slate-900">Escuro</option></select></label><button type="button" onClick={onToggleTelaCheia} className="mt-2 flex h-11 w-full items-center justify-between rounded-xl px-3 text-sm hover:bg-white/10"><span>Tela cheia</span>{telaCheia ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}</button></ReaderOptions>
     </div>
   );
 }
 
 export default function Leitura() {
   const { t } = useLocale();
-  const { id } = useParams();
+  const { id, workId } = useParams();
+  const effectiveWorkId = id || workId;
   const navigate = useNavigate();
   const location = useLocation();
   const { livros, loading } = useLivros();
@@ -866,6 +880,9 @@ export default function Leitura() {
   const adaptivePrefetchEnabled = featureEnabled('adaptivePrefetch', true);
   const [epubHtml, setEpubHtml] = useState('');
   const [mobiHtml, setMobiHtml] = useState('');
+  const [mobiStatus, setMobiStatus] = useState('idle');
+  const [mobiError, setMobiError] = useState('');
+  const [mobiAttempt, setMobiAttempt] = useState(0);
   const [pagina, setPagina] = useState(0);
   const [comicImagem, setComicImagem] = useState('');
   const [comicTotal, setComicTotal] = useState(0);
@@ -887,6 +904,8 @@ export default function Leitura() {
   const comicTotalRef = useRef(0);
   const comicToolbarTimerRef = useRef(null);
   const comicScrollTopRef = useRef(0);
+  const comicPointersRef = useRef(new Map());
+  const comicPinchRef = useRef(null);
   const livroState = location.state?.livro || null;
   const reducedMotion = useReducedMotion();
   const openedAtRef = useRef(performance.now());
@@ -902,7 +921,7 @@ export default function Leitura() {
   }, [location.pathname, location.state?.from, navigate]);
 
   const livro = useMemo(() => {
-    const livroDaBiblioteca = livros.find((item) => item.id === id);
+    const livroDaBiblioteca = livros.find((item) => item.id === effectiveWorkId);
     if (livroDaBiblioteca && livroState) {
       return {
         ...livroState,
@@ -910,7 +929,7 @@ export default function Leitura() {
       };
     }
     return livroDaBiblioteca || livroState;
-  }, [id, livroState, livros]);
+  }, [effectiveWorkId, livroState, livros]);
 
   useEffect(() => {
     if (livro) {
@@ -918,11 +937,13 @@ export default function Leitura() {
     }
   }, [livro]);
 
-  const formato = (livro?.formato || livro?.nome?.split('.').pop() || 'pdf').toLowerCase();
+  const formato = detectarFormato(livro);
   const readerEngine = engineNameFor(formato);
   const readerCapabilities = capabilitiesFor(formato);
   const url = bookContentUrl(livro);
   const paginasUrl = bookPagesUrl(livro);
+  const comicZoomController = useReaderZoom({ format: 'comic', defaultMode: 'fit-page', min: 0.75, max: 4, enabled: ['cbz', 'cbr'].includes(formato) });
+  const { zoom: comicZoom, mode: comicZoomMode, interactionProps: comicZoomInteractionProps } = comicZoomController;
 
   useEffect(()=>{if(!livro||firstPageMetricRef.current)return;const ready=formato==='pdf'||Boolean(epubHtml||mobiHtml||comicImagem);if(ready){firstPageMetricRef.current=true;recordReaderMetric({workId:livro.workId,fileId:livro.id,engine:readerEngine,event:'time-to-first-page',durationMs:performance.now()-openedAtRef.current});}},[comicImagem,epubHtml,formato,livro,mobiHtml,readerEngine]);
   useEffect(()=>{if(erroLeitor&&livro)recordReaderMetric({workId:livro.workId,fileId:livro.id,engine:readerEngine,event:'open-failure',detail:{message:erroLeitor}});},[erroLeitor,livro,readerEngine]);
@@ -990,22 +1011,36 @@ export default function Leitura() {
     const controller = new AbortController();
     setErroLeitor('');
     setMobiHtml('');
+    setMobiError('');
+    setMobiStatus('loading');
 
     fetch(url, { signal: controller.signal, credentials: 'include' })
-      .then((response) => response.ok ? response.text() : Promise.reject(new Error('download')))
+      .then((response) => {
+        if (response.ok) return response.text();
+        const error = new Error(`HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      })
       .then(async (html) => {
         const { parseMobiHtml } = await import('../readers/mobiParser.js');
-        if (!cancelado) setMobiHtml(parseMobiHtml(html, backendUrl));
+        if (!cancelado) {
+          setMobiHtml(parseMobiHtml(html, backendUrl));
+          setMobiStatus('ready');
+        }
       })
       .catch((error) => {
-        if (error.name !== 'AbortError' && !cancelado) setErroLeitor('Não foi possível renderizar este MOBI.');
+        if (error.name !== 'AbortError' && !cancelado) {
+          setMobiError(error.status ? `O servidor respondeu HTTP ${error.status}.` : 'O arquivo não retornou conteúdo legível.');
+          setMobiStatus('error');
+          setErroLeitor('Não foi possível renderizar este MOBI.');
+        }
       });
 
     return () => {
       cancelado = true;
       controller.abort();
     };
-  }, [livro, formato, url]);
+  }, [livro, formato, url, mobiAttempt]);
 
   const limparCacheComic = useCallback(() => {
     for (const urlCache of comicCacheRef.current.values()) URL.revokeObjectURL(urlCache);
@@ -1154,6 +1189,49 @@ export default function Leitura() {
     }
   });
 
+  const distanciaPointers = useCallback(() => {
+    const points = [...comicPointersRef.current.values()];
+    if (points.length < 2) return 0;
+    return Math.hypot(points[0].clientX - points[1].clientX, points[0].clientY - points[1].clientY);
+  }, []);
+  const onComicPointerDown = useCallback((event) => {
+    mostrarControlesComic();
+    if (event.pointerType === 'touch') {
+      comicPointersRef.current.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+      if (comicPointersRef.current.size >= 2) {
+        comicPinchRef.current = { distance: distanciaPointers(), zoom: comicZoom };
+        return;
+      }
+    }
+    comicPageTurn.onPointerDown(event);
+  }, [comicPageTurn, comicZoom, distanciaPointers, mostrarControlesComic]);
+  const onComicPointerMove = useCallback((event) => {
+    if (event.pointerType === 'touch' && comicPointersRef.current.has(event.pointerId)) {
+      comicPointersRef.current.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+      if (comicPinchRef.current) {
+        event.preventDefault();
+        comicZoomController.setZoom(comicPinchRef.current.zoom * (distanciaPointers() / Math.max(1, comicPinchRef.current.distance)));
+        return;
+      }
+    }
+    comicPageTurn.onPointerMove(event);
+  }, [comicPageTurn, comicZoomController, distanciaPointers]);
+  const onComicPointerUp = useCallback((event) => {
+    if (event.pointerType === 'touch') {
+      comicPointersRef.current.delete(event.pointerId);
+      if (comicPinchRef.current) {
+        if (comicPointersRef.current.size < 2) comicPinchRef.current = null;
+        return;
+      }
+    }
+    comicPageTurn.onPointerUp(event);
+  }, [comicPageTurn]);
+  const onComicPointerCancel = useCallback((event) => {
+    comicPointersRef.current.delete(event.pointerId);
+    comicPinchRef.current = null;
+    comicPageTurn.onPointerCancel(event);
+  }, [comicPageTurn]);
+
   return (
     <ReaderShell engine={readerEngine} capabilities={readerCapabilities}>
       {loading && !livro ? (
@@ -1163,7 +1241,7 @@ export default function Leitura() {
           <ReaderErrorBoundary readerKey={`${id}:${url}`} onExit={voltarParaBiblioteca}>
           {formato === 'pdf' && <PdfReader livro={livro} url={url} onError={setErroLeitor} telaCheia={telaCheia} onToggleTelaCheia={alternarTelaCheia} onExit={voltarParaBiblioteca} />}
           {formato === 'epub' && <EpubReader livro={livro} html={epubHtml} telaCheia={telaCheia} onToggleTelaCheia={alternarTelaCheia} onExit={voltarParaBiblioteca} />}
-          {['cbz', 'cbr'].includes(formato) && <div onScroll={aoScrollComic} onPointerDown={(event) => { mostrarControlesComic(); comicPageTurn.onPointerDown(event); }} onPointerMove={comicPageTurn.onPointerMove} onPointerUp={comicPageTurn.onPointerUp} onPointerCancel={comicPageTurn.onPointerCancel} className={`h-full ${comicMode === 'webtoon' ? 'overflow-y-auto bg-white' : 'touch-pan-y overflow-auto bg-white sm:grid sm:place-items-center sm:bg-slate-900 sm:p-6'}`}>
+          {['cbz', 'cbr'].includes(formato) && <div onScroll={aoScrollComic} {...comicZoomInteractionProps} onPointerDown={onComicPointerDown} onPointerMove={onComicPointerMove} onPointerUp={onComicPointerUp} onPointerCancel={onComicPointerCancel} className={`h-full ${comicMode === 'webtoon' ? 'overflow-y-auto bg-white' : 'touch-pan-y overflow-auto bg-white sm:grid sm:place-items-center sm:bg-slate-900 sm:p-6'}`} style={{ touchAction: comicZoom > 1 ? 'pan-x pan-y' : 'pan-y pinch-zoom' }}>
             {comicImagem ? (comicMode === 'webtoon' ? <img
               src={comicImagem}
               alt={`Página ${pagina + 1}`}
@@ -1172,8 +1250,9 @@ export default function Leitura() {
                 if (!comicModeManual && aspect >= 2.5) setComicMode('webtoon');
               }}
               onClick={mostrarControlesComic}
-              className="mx-auto block h-auto w-full max-w-[900px] object-contain"
-            /> : <div className="relative mx-auto w-full max-w-[1100px]">
+              style={{ width: comicZoomMode === 'custom' ? `${Math.max(1, comicZoom) * 100}%` : '100%', maxWidth: comicZoomMode === 'custom' ? 'none' : '900px' }}
+              className="mx-auto block h-auto object-contain"
+            /> : <div className="relative mx-auto" style={{ width: comicZoomMode === 'custom' ? `${Math.max(1, comicZoom) * 100}%` : '100%', maxWidth: comicZoomMode === 'custom' ? 'none' : '1100px' }}>
               <img
                 src={comicImagem}
                 alt={`Página ${pagina + 1}`}
@@ -1193,13 +1272,14 @@ export default function Leitura() {
             </div>) : <p className="grid h-full place-items-center text-sm text-white/70">{t('reader.preparing')}</p>}
             <div className={controlesComicVisiveis ? 'contents' : 'hidden sm:contents'}>
             <ReaderDock>
-              {seletorPaginaComicAberto ? <form onSubmit={(event) => { event.preventDefault(); irParaPagina(); }} className="flex items-center gap-2"><input autoFocus value={paginaDestino} onChange={(event) => setPaginaDestino(event.target.value)} inputMode="numeric" aria-label="Número da página" className="h-11 w-16 rounded-[1rem] bg-white/10 px-2 text-center outline-none" /><span className="whitespace-nowrap text-sm text-white/60">de {comicTotal}</span><button className="h-11 rounded-[1rem] bg-white px-4 text-sm font-semibold text-slate-950">Ir</button><button type="button" onClick={() => { setSeletorPaginaComicAberto(false); mostrarControlesComic(); }} className="grid h-11 w-11 place-items-center rounded-[1rem] hover:bg-white/12" aria-label="Cancelar"><X className="h-4 w-4" /></button></form> : <><button type="button" disabled={pagina === 0 || paginaCarregando || comicPageTurn.turn.phase !== 'idle'} onClick={() => { mostrarControlesComic(); comicPageTurn.turnPage('previous'); }} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12 disabled:opacity-35" aria-label="Página anterior"><ChevronLeft /></button><button type="button" onClick={() => { mostrarControlesComic(); setSeletorPaginaComicAberto(true); }} className="min-w-[88px] whitespace-nowrap px-2 text-sm font-medium tabular-nums" aria-label="Ir para página">{pagina + 1} / {comicTotal || '…'}</button><button type="button" disabled={pagina >= comicTotal - 1 || paginaCarregando || comicPageTurn.turn.phase !== 'idle'} onClick={() => { mostrarControlesComic(); comicPageTurn.turnPage('next'); }} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12 disabled:opacity-35" aria-label="Próxima página"><ChevronRight /></button><span className="mx-0.5 h-6 w-px bg-white/15" /><button type="button" onClick={voltarParaBiblioteca} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Fechar livro"><X className="h-4 w-4" /></button></>}
+              {seletorPaginaComicAberto ? <form onSubmit={(event) => { event.preventDefault(); irParaPagina(); }} className="flex items-center gap-2"><input autoFocus value={paginaDestino} onChange={(event) => setPaginaDestino(event.target.value)} inputMode="numeric" aria-label="Número da página" className="h-11 w-16 rounded-[1rem] bg-white/10 px-2 text-center outline-none" /><span className="whitespace-nowrap text-sm text-white/60">de {comicTotal}</span><button className="h-11 rounded-[1rem] bg-white px-4 text-sm font-semibold text-slate-950">Ir</button><button type="button" onClick={() => { setSeletorPaginaComicAberto(false); mostrarControlesComic(); }} className="grid h-11 w-11 place-items-center rounded-[1rem] hover:bg-white/12" aria-label="Cancelar"><X className="h-4 w-4" /></button></form> : <div className="flex items-center gap-1"><button type="button" disabled={pagina === 0 || paginaCarregando || comicPageTurn.turn.phase !== 'idle'} onClick={() => { mostrarControlesComic(); comicPageTurn.turnPage('previous'); }} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12 disabled:opacity-35" aria-label="Página anterior"><ChevronLeft /></button><button type="button" onClick={() => { mostrarControlesComic(); setSeletorPaginaComicAberto(true); }} className="min-w-[88px] whitespace-nowrap px-2 text-sm font-medium tabular-nums" aria-label="Ir para página">{pagina + 1} / {comicTotal || '…'}</button><button type="button" disabled={pagina >= comicTotal - 1 || paginaCarregando || comicPageTurn.turn.phase !== 'idle'} onClick={() => { mostrarControlesComic(); comicPageTurn.turnPage('next'); }} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12 disabled:opacity-35" aria-label="Próxima página"><ChevronRight /></button><span className="mx-0.5 h-6 w-px bg-white/15" /><button type="button" onClick={voltarParaBiblioteca} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Fechar livro"><X className="h-4 w-4" /></button></div>}
+              <ReaderZoomControls capabilities={readerCapabilities} zoom={comicZoom} mode={comicZoomMode} onZoomIn={comicZoomController.zoomIn} onZoomOut={comicZoomController.zoomOut} onReset={comicZoomController.resetZoom} onFitWidth={() => comicZoomController.setFitMode('fit-width')} onFitPage={() => comicZoomController.setFitMode('fit-page')} className="w-full border-t border-white/10 pt-1 sm:w-auto sm:border-l sm:border-t-0 sm:pl-1 sm:pt-0" />
             </ReaderDock>
             </div>
-            <ReaderOptions open={menuComicAberto} onClose={() => { setMenuComicAberto(false); mostrarControlesComic(); }}><p className="mb-3 text-sm font-semibold">Leitura</p><label className="mt-2 flex items-center justify-between gap-3 text-sm text-white/70"><span>Modo</span><select value={comicMode} onChange={(event) => alterarModoComic(event.target.value)} aria-label="Modo de leitura" className="h-10 rounded-xl bg-white/10 px-3 text-sm text-white outline-none"><option value="page" className="text-slate-900">Página</option><option value="webtoon" className="text-slate-900">Webtoon</option></select></label><button type="button" onClick={alternarTelaCheia} className="mt-3 flex h-11 w-full items-center justify-between rounded-xl px-3 text-sm hover:bg-white/10"><span>Tela cheia</span>{telaCheia ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}</button></ReaderOptions>
+            <ReaderOptions open={menuComicAberto} onClose={() => { setMenuComicAberto(false); mostrarControlesComic(); }}><p className="mb-3 text-sm font-semibold">Leitura</p><ReaderZoomControls capabilities={readerCapabilities} zoom={comicZoom} mode={comicZoomMode} onZoomIn={comicZoomController.zoomIn} onZoomOut={comicZoomController.zoomOut} onReset={comicZoomController.resetZoom} onFitWidth={() => comicZoomController.setFitMode('fit-width')} onFitPage={() => comicZoomController.setFitMode('fit-page')} className="w-full justify-center" /><label className="mt-3 flex items-center justify-between gap-3 text-sm text-white/70"><span>Modo</span><select value={comicMode} onChange={(event) => alterarModoComic(event.target.value)} aria-label="Modo de leitura" className="h-10 rounded-xl bg-white/10 px-3 text-sm text-white outline-none"><option value="page" className="text-slate-900">Página</option><option value="webtoon" className="text-slate-900">Webtoon</option></select></label><button type="button" onClick={alternarTelaCheia} className="mt-3 flex h-11 w-full items-center justify-between rounded-xl px-3 text-sm hover:bg-white/10"><span>Tela cheia</span>{telaCheia ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}</button></ReaderOptions>
           </div>}
-          {formato === 'mobi' && <MobiReader livro={livro} html={mobiHtml} telaCheia={telaCheia} onToggleTelaCheia={alternarTelaCheia} onExit={voltarParaBiblioteca} />}
-          {!['pdf', 'epub', 'cbz', 'mobi', 'cbr'].includes(formato) && <div className="grid h-full w-full place-items-center p-8 text-center text-white"><p>{t('reader.unsupported',{format:formato})}</p></div>}
+          {formato === 'mobi' && <MobiReader livro={livro} html={mobiHtml} status={mobiStatus} error={mobiError} onRetry={() => setMobiAttempt((value) => value + 1)} telaCheia={telaCheia} onToggleTelaCheia={alternarTelaCheia} onExit={voltarParaBiblioteca} />}
+          {!['pdf', 'epub', 'cbz', 'mobi', 'cbr'].includes(formato) && <div className="grid h-full w-full place-items-center p-8 text-center text-white"><div><p>{t('reader.unsupported',{format:livro.formato || livro.extension || 'unknown'})}</p>{url && <a href={url} download={livro.originalFilename || livro.nome} className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-white px-4 text-sm font-semibold text-slate-950">Baixar arquivo original</a>}</div></div>}
           </ReaderErrorBoundary>
           {erroLeitor && <div className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded bg-rose-900 px-4 py-2 text-sm text-white">{erroLeitor}</div>}
         </>

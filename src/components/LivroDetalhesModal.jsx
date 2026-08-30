@@ -1,264 +1,32 @@
-import { CalendarDays, FileText, Globe2, Hash, Pencil, PlayCircle, RefreshCw, Save, Tag, UserRound, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { BookOpen, Check, FileText, Globe2, Hash, MoreHorizontal, Pencil, PlayCircle, RefreshCw, Save, Tag, UserRound, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import OfflineButton from './OfflineButton.jsx';
 import { apiFetch, bookCoverUrl } from '../lib/api.js';
+import { getReadingProgress } from '../utils/localStorage.js';
+import { Dialog, DialogContent } from './ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from './ui/dropdown-menu';
 
-function isImageUrl(value = '') {
-  return /^https?:\/\//i.test(value) || value.startsWith('data:') || value.startsWith('/');
+function imageUrl(value = '') { return /^https?:\/\//i.test(value) || value.startsWith('data:') || value.startsWith('/'); }
+function textOf(value, fallback = '') {
+  if (Array.isArray(value)) return value.map((item) => textOf(item)).filter(Boolean).join(', ') || fallback;
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  if (value && typeof value === 'object') return textOf(value.name || value.title || value.label, fallback);
+  return fallback;
 }
-
-function autoresDo(livro) {
-  return Array.isArray(livro.autor) ? livro.autor.join(', ') : livro.autor || 'Autor não informado';
-}
+function authorOf(work) { return textOf(work.autor || work.author, 'Autor não informado'); }
 
 export default function LivroDetalhesModal({ livro, onClose, onMetadataQueued }) {
-  const location = useLocation();
-  const [detalhes, setDetalhes] = useState(null);
-  const [editando, setEditando] = useState(false);
-  const [formulario, setFormulario] = useState({});
-  const [obra, setObra] = useState(null);
-  const [arquivoEscolhido, setArquivoEscolhido] = useState(null);
-
-  useEffect(() => {
-    if (!livro) {
-      setDetalhes(null);
-      setEditando(false);
-      return undefined;
-    }
-
-    const controller = new AbortController();
-    setDetalhes(null);
-    setObra(null); setArquivoEscolhido(null);
-
-    apiFetch(`/livros/${encodeURIComponent(livro.id)}/metadados`, { signal: controller.signal })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload) => {
-        if (payload?.data) setDetalhes(payload.data);
-      })
-      .catch(() => {});
-    if (livro.workId) apiFetch(`/works/${encodeURIComponent(livro.workId)}`, { signal: controller.signal }).then((response)=>response.ok?response.json():null).then((payload)=>{if(payload?.data)setObra(payload.data);}).catch(()=>{});
-
-    return () => controller.abort();
-  }, [livro]);
-
+  const location = useLocation(); const [details, setDetails] = useState(null); const [work, setWork] = useState(null); const [selectedFile, setSelectedFile] = useState(null); const [expanded, setExpanded] = useState(false); const [editing, setEditing] = useState(false); const [canManage, setCanManage] = useState(false); const [form, setForm] = useState({});
+  useEffect(() => { if (!livro) return undefined; const controller = new AbortController(); setDetails(null); setWork(null); setSelectedFile(null); setExpanded(false); apiFetch(`/works/${encodeURIComponent(livro.id)}/metadata`, { signal: controller.signal }).then((response) => response.ok ? response.json() : null).then((payload) => { if (payload?.data) setDetails(payload.data); }).catch(() => {}); apiFetch('/session', { signal: controller.signal }).then((response) => response.ok ? response.json() : null).then((payload) => setCanManage(Boolean(payload?.permissions?.includes('admin.access')))).catch(() => {}); if (livro.workId) apiFetch(`/works/${encodeURIComponent(livro.workId)}`, { signal: controller.signal }).then((response) => response.ok ? response.json() : null).then((payload) => { if (payload?.data) setWork(payload.data); }).catch(() => {}); return () => controller.abort(); }, [livro]);
+  const displayed = selectedFile || details || livro; const progressState = livro ? getReadingProgress(livro.id) : null; const progress = Math.max(0, Math.min(1, Number(progressState?.progress || 0))); const title = textOf(displayed?.nome || displayed?.title, 'Obra'); const description = textOf(displayed?.descricao || displayed?.description); const cover = displayed ? bookCoverUrl(displayed) : ''; const files = Array.isArray(work?.files) ? work.files : Array.isArray(livro?.files) ? livro.files : [];
+  const metadata = useMemo(() => [['Formato', textOf(displayed?.formato || displayed?.format || textOf(displayed?.nome).split('.').pop()).toUpperCase()], ['Origem', displayed?.fonte === 'local' ? 'Arquivo local' : displayed?.fonte ? 'Google Drive' : ''], ['Categoria', textOf(displayed?.categoria || displayed?.category)], ['Idioma', textOf(displayed?.idioma || displayed?.language)], ['Ano', textOf(displayed?.ano || displayed?.year)]].filter(([, value]) => value), [displayed]);
   if (!livro) return null;
-
-  const exibido = arquivoEscolhido || detalhes || livro;
-  const origem = exibido.fonte === 'local' ? 'Arquivo local' : 'Google Drive';
-  const capa = bookCoverUrl(exibido);
-  const linhasInfo = [
-    ['Editora', exibido.editora],
-    ['Ano', exibido.ano],
-    ['ISBN', exibido.isbn],
-    ['Páginas', exibido.numeroPaginas],
-    ['Idioma', exibido.idioma],
-    ['Formato', (exibido.formato || exibido.nome?.split('.').pop() || '').toUpperCase()],
-    ['Origem', origem],
-    ['Categoria', exibido.categoria]
-  ].filter(([, valor]) => valor);
-
-  async function atualizarMetadados() {
-    await apiFetch(`/livros/${encodeURIComponent(exibido.id)}/enriquecer?mode=force`, { method: 'POST' });
-    setDetalhes((atual) => ({ ...(atual || exibido), metadataStatus: 'processing' }));
-    onMetadataQueued?.();
-  }
-
-  function iniciarEdicao() {
-    setFormulario({
-      nome: exibido.nome || '', autor: Array.isArray(exibido.autor) ? exibido.autor.join(', ') : exibido.autor || '',
-      isbn: exibido.isbn13 || exibido.isbn || '', editora: exibido.editora || '', ano: exibido.ano || '', tags: (exibido.tags || []).join(', ')
-    });
-    setEditando(true);
-  }
-
-  async function salvarEdicao(event) {
-    event.preventDefault();
-    const response = await apiFetch(`/livros/${encodeURIComponent(exibido.id)}/atualizar`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formulario)
-    });
-    const payload = await response.json().catch(() => null);
-    if (payload?.data) setDetalhes(payload.data);
-    setEditando(false);
-    onMetadataQueued?.();
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 bg-slate-950/72 px-4 py-6 backdrop-blur-md"
-      role="presentation"
-      onMouseDown={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="livro-modal-titulo"
-        onMouseDown={(event) => event.stopPropagation()}
-        className="mx-auto flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-[rgba(250,249,245,0.98)] shadow-2xl dark:border-slate-800 dark:bg-[rgba(18,20,24,0.98)]"
-      >
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800 sm:px-7">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">
-            Biblioteca
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="quiet-action grid h-10 w-10 place-items-center text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white"
-            aria-label="Fechar detalhes"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="overflow-y-auto">
-          <div className="grid gap-8 px-5 py-6 sm:px-7 sm:py-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-12">
-            <div className="mx-auto w-full max-w-[280px]">
-              <div className="book-cover aspect-[2/3] overflow-hidden">
-                {isImageUrl(capa) ? (
-                  <img src={capa} alt={`Capa de ${exibido.nome}`} className="h-full w-full object-contain" />
-                ) : (
-                  <div className="fallback-cover flex h-full flex-col justify-between p-6 text-center">
-                    <FileText className="mx-auto h-7 w-7 opacity-55" />
-                    <div className="space-y-3">
-                      <p className="text-xl font-semibold leading-tight">{exibido.nome}</p>
-                      <p className="text-[11px] font-medium uppercase tracking-[0.18em] opacity-70">
-                        {autoresDo(exibido)}
-                      </p>
-                    </div>
-                    <span className="text-[10px] uppercase tracking-[0.24em] opacity-45">Sem capa</span>
-                  </div>
-                )}
-              </div>
-
-              <Link
-                to={`/livro/${exibido.id}`}
-                state={{ livro: exibido, from: { pathname: location.pathname, search: location.search, hash: location.hash, state: location.state } }}
-                onClick={onClose}
-                className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-slate-950 px-5 text-sm font-medium text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
-              >
-                <PlayCircle className="h-4 w-4" />
-                Ler
-              </Link>
-              <OfflineButton livro={exibido} />
-              {(obra?.files || livro.files)?.length > 1 && <div className="mt-3"><p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Escolher formato</p><div className="space-y-1">{(obra?.files || livro.files).map((file)=><button type="button" key={file.id} onClick={()=>setArquivoEscolhido(file)} className={`flex min-h-11 w-full items-center justify-between rounded-xl border px-3 text-sm ${exibido.id===file.id?'border-cyan-500 bg-cyan-500/10':'border-slate-200 dark:border-slate-800'}`}><strong>{String(file.formato||'arquivo').toUpperCase()}</strong><span className="text-xs text-slate-500">{file.fileSize?`${(file.fileSize/1024/1024).toFixed(1)} MB`:''} · {file.fonte==='local'?'Local':'Drive'}</span></button>)}</div></div>}
-            </div>
-
-            <div className="min-w-0 space-y-7">
-              <div className="space-y-4">
-                <div className="flex flex-wrap gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-                  <span className="rounded-full bg-slate-100 px-3 py-1 dark:bg-slate-800">{origem}</span>
-                  {exibido.categoria && <span className="rounded-full bg-slate-100 px-3 py-1 dark:bg-slate-800">{exibido.categoria}</span>}
-                  {exibido.metadataStatus === 'completed' && <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Metadados verificados</span>}
-                  {exibido.needsReview && <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">Revisão recomendada</span>}
-                </div>
-
-                <div>
-                  <h2 id="livro-modal-titulo" className="font-serif text-3xl font-semibold leading-tight text-slate-950 dark:text-white sm:text-4xl">
-                    {exibido.nome}
-                  </h2>
-                  <p className="mt-3 flex items-center gap-2 text-base text-slate-500 dark:text-slate-400">
-                    <UserRound className="h-4 w-4 shrink-0" />
-                    {autoresDo(exibido)}
-                  </p>
-                  {(exibido.editora || exibido.ano) && (
-                    <p className="mt-2 text-sm text-slate-400 dark:text-slate-500">
-                      {[exibido.editora, exibido.ano].filter(Boolean).join(' • ')}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {exibido.tags?.length > 0 && (
-                <div className="space-y-3">
-                  <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
-                    <Tag className="h-4 w-4" />
-                    Tags
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {exibido.tags.map((tag) => (
-                      <span key={tag} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {exibido.descricao && (
-                <div className="space-y-3 border-t border-slate-200 pt-6 dark:border-slate-800">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
-                    Sobre o livro
-                  </p>
-                  <p className="max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300">
-                    {exibido.descricao}
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-4 border-t border-slate-200 pt-6 dark:border-slate-800">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
-                  Informações
-                </p>
-                <dl className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {linhasInfo.map(([label, valor]) => (
-                    <div key={label} className="grid gap-1 py-3 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-6">
-                      <dt className="text-sm text-slate-400 dark:text-slate-500">{label}</dt>
-                      <dd className="text-sm font-medium text-slate-800 dark:text-slate-200">{valor}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-
-              <div className="flex flex-wrap gap-4 text-sm text-slate-500 dark:text-slate-400">
-                {exibido.ano && (
-                  <span className="inline-flex items-center gap-2">
-                    <CalendarDays className="h-4 w-4" />
-                    {exibido.ano}
-                  </span>
-                )}
-                {exibido.idioma && (
-                  <span className="inline-flex items-center gap-2">
-                    <Globe2 className="h-4 w-4" />
-                    {exibido.idioma}
-                  </span>
-                )}
-                {exibido.isbn && (
-                  <span className="inline-flex items-center gap-2">
-                    <Hash className="h-4 w-4" />
-                    {exibido.isbn}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-4">
-                <button type="button" onClick={atualizarMetadados} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
-                  <RefreshCw className="h-4 w-4" />Atualizar metadados
-                </button>
-                <button type="button" onClick={iniciarEdicao} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
-                  <Pencil className="h-4 w-4" />Editar metadados
-                </button>
-              </div>
-
-              {editando && (
-                <form onSubmit={salvarEdicao} className="grid gap-3 rounded-2xl border border-slate-200 p-4 dark:border-slate-800 sm:grid-cols-2">
-                  {[
-                    ['nome', 'Título'], ['autor', 'Autor'], ['isbn', 'ISBN'], ['editora', 'Editora'], ['ano', 'Ano'], ['tags', 'Tags separadas por vírgula']
-                  ].map(([campo, label]) => (
-                    <label key={campo} className={`text-xs font-medium text-slate-500 dark:text-slate-400 ${campo === 'nome' || campo === 'autor' ? 'sm:col-span-2' : ''}`}>
-                      {label}
-                      <input value={formulario[campo] || ''} onChange={(event) => setFormulario((atual) => ({ ...atual, [campo]: event.target.value }))} className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
-                    </label>
-                  ))}
-                  <div className="flex gap-2 sm:col-span-2">
-                    <button type="submit" className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-xs font-semibold text-white dark:bg-white dark:text-slate-950"><Save className="h-3.5 w-3.5" />Salvar e proteger</button>
-                    <button type="button" onClick={() => setEditando(false)} className="rounded-full px-4 py-2 text-xs font-semibold text-slate-500">Cancelar</button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  function startEditing() { setForm({ nome: displayed.nome || '', autor: Array.isArray(displayed.autor) ? displayed.autor.join(', ') : displayed.autor || '', isbn: displayed.isbn13 || displayed.isbn || '', editora: displayed.editora || '', ano: displayed.ano || '', tags: (displayed.tags || []).join(', ') }); setEditing(true); }
+  async function saveEditing(event) { event.preventDefault(); const response = await apiFetch(`/admin/works/${encodeURIComponent(displayed.id)}/metadata`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) }); const payload = await response.json().catch(() => null); if (payload?.data) setDetails(payload.data); setEditing(false); onMetadataQueued?.(); }
+  async function enrich() { await apiFetch(`/admin/works/${encodeURIComponent(displayed.id)}/enrich`, { method: 'POST' }); setDetails((current) => ({ ...(current || displayed), metadataStatus: 'processing' })); onMetadataQueued?.(); }
+  const safeTags = Array.isArray(displayed.tags) ? displayed.tags.map((tag) => textOf(tag)).filter(Boolean) : [];
+  const seriesName = textOf(displayed.serie || displayed.series_name);
+  const volume = textOf(displayed.volume || displayed.volume_number);
+  return <Dialog open={Boolean(livro)} onOpenChange={(open) => { if (!open) onClose?.(); }}><DialogContent className="w-[min(94vw,900px)] max-w-none rounded-2xl bg-surface p-0"><div className="flex items-center justify-between border-b border-border-subtle px-5 py-4 sm:px-7"><span className="text-caption font-semibold uppercase tracking-[.18em] text-muted">Detalhes da obra</span><button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-md text-muted hover:bg-surface-raised hover:text-primary" aria-label="Fechar detalhes"><X className="h-5 w-5" /></button></div><div className="grid gap-7 overflow-y-auto px-5 py-6 sm:px-7 sm:py-8 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-10"><div className="mx-auto w-full max-w-[220px]"><div className="aspect-[2/3] overflow-hidden rounded-md bg-surface-raised">{imageUrl(cover) ? <img src={cover} alt={`Capa de ${title}`} className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center p-5 text-center text-muted"><div><FileText className="mx-auto h-8 w-8" /><p className="mt-3 text-sm font-medium">{title}</p><p className="mt-1 text-caption">Sem capa</p></div></div>}</div><Link to={`/livro/${encodeURIComponent(displayed.id)}`} state={{ livro: displayed, from: { pathname: location.pathname, search: location.search, hash: location.hash, state: location.state } }} onClick={onClose} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-accent px-5 text-sm font-semibold text-accent-foreground hover:bg-accent-hover"><PlayCircle className="h-4 w-4" />{progress > 0 ? 'Continuar leitura' : 'Ler'}</Link><OfflineButton livro={displayed} />{files.length > 1 && <div className="mt-4 space-y-1">{files.map((file) => <button type="button" key={file.id} onClick={() => setSelectedFile(file)} className={`flex min-h-10 w-full items-center justify-between rounded-md border px-3 text-caption ${displayed.id === file.id ? 'border-accent bg-accent/10' : 'border-border'}`}><strong>{textOf(file.formato || file.format, 'ARQUIVO').toUpperCase()}</strong><span className="text-muted">{file.fonte === 'local' ? 'Local' : 'Drive'}</span></button>)}</div>}</div><div className="min-w-0 space-y-6"><div><h2 className="max-w-2xl text-2xl font-semibold leading-tight text-primary sm:text-3xl">{title}</h2><p className="mt-2 flex items-center gap-2 text-body-sm text-secondary"><UserRound className="h-4 w-4" />{authorOf(displayed)}</p>{seriesName && <p className="mt-2 text-body-sm text-secondary">{seriesName}{volume ? ` · Volume ${volume}` : ''}</p>}</div>{progress > 0 && <div className="rounded-md border border-border-subtle bg-surface-raised p-4"><div className="flex items-center justify-between gap-3 text-body-sm"><span className="flex items-center gap-2 font-medium"><BookOpen className="h-4 w-4 text-accent" />{progress >= .98 ? 'Concluído' : `${Math.round(progress * 100)}% concluído`}</span>{progressState?.page && <span className="text-muted">Página {textOf(progressState.page)}{progressState.pageCount ? ` de ${textOf(progressState.pageCount)}` : ''}</span>}</div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-background-subtle"><span className="block h-full rounded-full bg-accent" style={{ width: `${progress * 100}%` }} /></div></div>}{description && <div><p className="text-body-sm leading-7 text-secondary line-clamp-4" style={expanded ? { display: 'block' } : undefined}>{description}</p>{description.length > 320 && <button type="button" onClick={() => setExpanded((value) => !value)} className="mt-2 text-caption font-semibold text-link hover:text-link-hover">{expanded ? 'Ver menos' : 'Ver mais'}</button>}</div>}<div className="flex flex-wrap gap-2 text-caption text-muted">{metadata.map(([label, value]) => <span key={label} className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle px-2.5 py-1">{label === 'Idioma' && <Globe2 className="h-3.5 w-3.5" />}{label === 'Ano' && <Hash className="h-3.5 w-3.5" />}{value}</span>)}</div>{safeTags.length > 0 && <div className="flex flex-wrap gap-2">{safeTags.map((tag) => <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-surface-raised px-2.5 py-1 text-caption text-secondary"><Tag className="h-3 w-3" />{tag}</span>)}</div>}{canManage && <div className="flex justify-end"><DropdownMenu><DropdownMenu.Trigger render={<button type="button" className="inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-caption font-semibold text-secondary hover:bg-surface-raised" aria-label="Ações administrativas"><MoreHorizontal className="h-4 w-4" />Ações</button>} /><DropdownMenuContent><DropdownMenuItem onClick={startEditing}><Pencil className="mr-2 h-4 w-4" />Editar metadados</DropdownMenuItem><DropdownMenuItem onClick={enrich}><RefreshCw className="mr-2 h-4 w-4" />Atualizar metadados</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div>}{editing && <form onSubmit={saveEditing} className="grid gap-3 rounded-md border border-border-subtle bg-surface-raised p-4 sm:grid-cols-2">{[['nome','Título'],['autor','Autor'],['isbn','ISBN'],['editora','Editora'],['ano','Ano'],['tags','Tags']].map(([key, label]) => <label key={key} className="text-caption font-medium text-secondary">{label}<input className="mt-1 h-10 w-full rounded-md border border-border bg-surface px-3 text-body-sm text-primary outline-none focus:border-focus-ring" value={form[key] || ''} onChange={(event) => setForm({ ...form, [key]: event.target.value })} /></label>)}<div className="flex gap-2 sm:col-span-2"><button type="submit" className="inline-flex min-h-10 items-center gap-2 rounded-md bg-accent px-4 text-caption font-semibold text-accent-foreground"><Save className="h-3.5 w-3.5" />Salvar</button><button type="button" onClick={() => setEditing(false)} className="rounded-md px-3 text-caption text-muted">Cancelar</button></div></form>}</div></div></DialogContent></Dialog>;
 }

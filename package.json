@@ -9,15 +9,19 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --test test/*.test.js",
+    "typecheck": "tsc --noEmit",
     "lint": "node scripts/lint.js",
     "test:e2e": "node test/e2e-smoke.js",
     "analyze:bundle": "npm run build && node scripts/analyze-bundle.js",
     "check:performance": "npm run build && node scripts/check-performance-budget.js"
   },
   "dependencies": {
+    "@base-ui/react": "^1.7.0",
     "@tanstack/react-query": "^5.102.1",
     "@tanstack/react-virtual": "^3.14.10",
     "axios": "^1.6.7",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "framer-motion": "^11.0.8",
     "jszip": "^3.10.1",
     "lucide-react": "^0.468.0",
@@ -25,14 +29,18 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hot-toast": "^2.4.1",
-    "react-router-dom": "^7.18.2"
+    "react-router-dom": "^7.18.2",
+    "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^6.1.0",
     "autoprefixer": "^10.4.17",
-    "postcss": "^8.4.35",
     "playwright-core": "^1.55.0",
+    "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
+    "typescript": "^5.9.2",
     "vite": "^8.2.2"
   },
   "engines": {

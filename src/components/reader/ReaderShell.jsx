@@ -9,8 +9,8 @@ export function ReaderViewport({ children, className = '', ...props }) {
   return <div className={`reader-viewport h-full w-full ${className}`} {...props}>{children}</div>;
 }
 
-export function ReaderDock({ children }) {
-  return <div role="toolbar" aria-label="Navegação do leitor" className="reader-toolbar fixed left-1/2 z-50 flex max-w-[calc(100vw-24px)] -translate-x-1/2 items-center gap-1 rounded-[1.35rem] border border-white/15 bg-slate-950/65 p-1.5 text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)] backdrop-blur-xl" style={{ bottom: 'calc(10px + env(safe-area-inset-bottom))' }}>{children}</div>;
+export function ReaderDock({ children, className = '' }) {
+  return <div role="toolbar" aria-label="Navegação do leitor" className={`reader-toolbar fixed left-1/2 -translate-x-1/2 z-50 flex max-w-[calc(100vw-16px)] flex-wrap items-center justify-center gap-0.5 rounded-2xl border border-white/10 bg-slate-950/75 p-1 text-white shadow-[0_8px_24px_rgba(0,0,0,0.2)] backdrop-blur-xl sm:max-w-[calc(100vw-24px)] ${className}`} style={{ bottom: 'calc(10px + env(safe-area-inset-bottom))' }}>{children}</div>;
 }
 
 export function ReaderTopBar({ title, onClose }) {

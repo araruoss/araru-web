@@ -1,16 +1,18 @@
 import axios from 'axios';
 
 function normalizeApiBase(value = '') {
-  const configured = String(value || '').trim() || '/api';
+  const configured = String(value || '').trim() || '/api/v1';
 
   if (/^https?:\/\//i.test(configured)) {
     const url = new URL(configured);
-    if (!url.pathname || url.pathname === '/') url.pathname = '/api';
+    if (!url.pathname || url.pathname === '/') url.pathname = '/api/v1';
+    else if (url.pathname === '/api') url.pathname = '/api/v1';
     return url.toString().replace(/\/$/, '');
   }
 
   const relative = configured.startsWith('/') ? configured : `/${configured}`;
-  return (relative === '/' ? '/api' : relative).replace(/\/$/, '');
+  if (relative === '/' || relative === '/api') return '/api/v1';
+  return relative.replace(/\/$/, '');
 }
 
 export const API_BASE_URL = normalizeApiBase(import.meta.env?.VITE_API_URL);
@@ -20,15 +22,15 @@ export function apiUrl(path = '') {
   if (/^(https?:|data:|blob:)/i.test(path)) return path;
 
   let suffix = String(path);
-  if (suffix === '/api') suffix = '';
-  else if (suffix.startsWith('/api/')) suffix = suffix.slice(4);
+  if (suffix === '/api' || suffix === '/api/v1') suffix = '';
+  else if (suffix.startsWith('/api/v1/')) suffix = suffix.slice(7);
   if (!suffix.startsWith('/')) suffix = `/${suffix}`;
   return `${API_BASE_URL}${suffix}`;
 }
 
 export function backendUrl(value = '') {
   if (!value || /^(https?:|data:|blob:)/i.test(value)) return value;
-  if (value === '/api' || value.startsWith('/api/')) return apiUrl(value);
+  if (value === '/api' || value.startsWith('/api/v1/')) return apiUrl(value);
 
   if (/^https?:\/\//i.test(API_BASE_URL) && value.startsWith('/')) {
     return new URL(value, API_BASE_URL).toString();
@@ -40,22 +42,26 @@ export function backendUrl(value = '') {
 export function bookCoverUrl(bookOrId, fingerprint = '') {
   const book = typeof bookOrId === 'object' ? bookOrId : null;
   const id = book?.id || bookOrId;
-  const source = book?.capaUrl || book?.capa;
-  if (source && (/^(https?:|data:|blob:)/i.test(source) || source.startsWith('/'))) {
+  const source = book?.capaUrl || book?.coverUrl || book?.capa;
+  if (typeof source === 'string' && source && (/^(https?:|data:|blob:)/i.test(source) || source.startsWith('/'))) {
     return backendUrl(source);
   }
+  const primaryFile = book?.files?.find((file) => file?.isPrimary) || book?.files?.[0];
+  const format = String(book?.formato || book?.format || primaryFile?.formato || primaryFile?.format || '').toLowerCase();
+  if (format && !new Set(['pdf', 'epub', 'mobi', 'cbz', 'cbr']).has(format)) return '';
+  if (!id || typeof id !== 'string' && typeof id !== 'number') return '';
   const version = book?.fileFingerprint || fingerprint;
-  return apiUrl(`/livros/${encodeURIComponent(id)}/capa${version ? `?v=${encodeURIComponent(version)}` : ''}`);
+  return apiUrl(`/works/${encodeURIComponent(id)}/cover${version ? `?v=${encodeURIComponent(version)}` : ''}`);
 }
 
 export function bookContentUrl(book) {
   const source = book?.contentUrl || book?.previewUrl;
-  return source ? backendUrl(source) : (book?.id ? apiUrl(`/livros/${encodeURIComponent(book.id)}/conteudo`) : '');
+  return source ? backendUrl(source) : (book?.id ? apiUrl(`/works/${encodeURIComponent(book.id)}/content`) : '');
 }
 
 export function bookPagesUrl(bookOrId) {
   const id = typeof bookOrId === 'object' ? bookOrId?.id : bookOrId;
-  return id ? apiUrl(`/livros/${encodeURIComponent(id)}/paginas`) : '';
+  return id ? apiUrl(`/works/${encodeURIComponent(id)}/pages`) : '';
 }
 
 export function comicPageUrl(bookOrId, page) {
@@ -64,13 +70,13 @@ export function comicPageUrl(bookOrId, page) {
 
 export function mobiResourceUrl(bookOrId, resourceIndex) {
   const id = typeof bookOrId === 'object' ? bookOrId?.id : bookOrId;
-  return apiUrl(`/livros/${encodeURIComponent(id)}/recursos/mobi/${encodeURIComponent(resourceIndex)}`);
+  return apiUrl(`/works/${encodeURIComponent(id)}/resources/mobi/${encodeURIComponent(resourceIndex)}`);
 }
 
 export function isApiCoverUrl(value = '') {
   try {
     const url = new URL(value, typeof window === 'undefined' ? 'http://localhost' : window.location.origin);
-    return /^\/api\/livros\/[^/]+\/capa$/.test(url.pathname);
+    return /^\/api\/v1\/works\/[^/]+\/cover$/.test(url.pathname);
   } catch {
     return false;
   }
@@ -93,15 +99,19 @@ export function apiErrorMessage(error, fallback = 'Não foi possível concluir a
 }
 
 export const queryKeys = {
-  catalog: ['catalog'],
+  catalog: ['works'],
   categories: ['categories'],
   categoryTree: ['category-tree'],
   profiles: ['profiles'],
   jobs: ['jobs'],
   series: ['series'],
-  commandSearch: (query) => ['command-search', query],
-  works: ['works'],
-  work: (id) => ['work', id]
+  search: { global: (query) => ['search', 'global', query], series: ['search', 'series'] },
+  commandSearch: (query) => ['search', 'global', query],
+  works: { all: ['works'], list: (filters = {}) => ['works', filters], detail: (id) => ['works', 'detail', id] },
+  work: (id) => ['works', 'detail', id],
+  session: ['session'],
+  home: ['home'],
+  admin: { all: ['admin'], jobs: ['admin', 'jobs'], settings: ['admin', 'settings'] }
 };
 
 export async function fetchJson(path, { signal, params } = {}) {

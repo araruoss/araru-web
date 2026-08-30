@@ -13,6 +13,7 @@ export function setStorageItem(key, value) {
 
 const ACTIVE_PROFILE_KEY = 'biblioteca:active-profile:v1';
 const SYNC_UPDATED_KEY = 'biblioteca:sync-updated-at:v1';
+const SYNC_VERSION_KEY = 'biblioteca:sync-version:v1';
 function readingKey(key) {
   const profile = getStorageItem(ACTIVE_PROFILE_KEY, 'default');
   return profile && profile !== 'default' ? `${key}:profile:${profile}` : key;
@@ -150,7 +151,8 @@ export function getReadingStats() {
 export function getLocalReadingState() {
   return {
     favorites: getFavoritos(), history: getUltimosLidos(), progress: getAllReadingProgress(),
-    stats: getReadingStats(), clientUpdatedAt: Number(getStorageItem(readingKey(SYNC_UPDATED_KEY), 0))
+    stats: getReadingStats(), version: Number(getStorageItem(readingKey(SYNC_VERSION_KEY), 0)),
+    clientUpdatedAt: Number(getStorageItem(readingKey(SYNC_UPDATED_KEY), 0))
   };
 }
 
@@ -159,6 +161,7 @@ export function applyReadingState(state) {
   setStorageItem(readingKey('biblioteca:ultimos-lidos'), state.history || []);
   setStorageItem(readingKey(READING_PROGRESS_KEY), state.progress || {});
   setStorageItem(readingKey(READING_STATS_KEY), state.stats || { openedBookIds: [], completedBookIds: [], days: {} });
+  setStorageItem(readingKey(SYNC_VERSION_KEY), Number(state.version || 0));
   setStorageItem(readingKey(SYNC_UPDATED_KEY), Number(state.clientUpdatedAt || 0));
 }
 

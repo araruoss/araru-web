@@ -11,7 +11,7 @@ export function parseMobiHtml(conteudo = '', resolveResourceUrl = (value) => val
   const corpo = documento.body?.innerHTML || conteudo;
   return `<style>
     .mobi-conteudo { overflow-wrap: anywhere; }
-    .mobi-conteudo img, .mobi-conteudo svg, .mobi-conteudo video { display: block; max-width: 100% !important; height: auto !important; margin: 1rem auto; }
+    .mobi-conteudo img, .mobi-conteudo svg, .mobi-conteudo video { display: block; width: var(--reader-media-width, 100%) !important; max-width: none !important; height: auto !important; margin: 1rem auto; }
     .mobi-conteudo table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
     .mobi-conteudo pre { max-width: 100%; overflow-x: auto; white-space: pre-wrap; }
     .mobi-conteudo p, .mobi-conteudo li { line-height: inherit !important; }

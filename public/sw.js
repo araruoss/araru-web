@@ -1,7 +1,5 @@
-// Namespace legado preservado para manter caches e instalações PWA existentes.
-// Consulte docs/brand/rebranding-migration.md antes de alterar.
-const CACHE_PREFIX = 'biblioteca-digital-';
-const CACHE_VERSION = 'v5';
+const CACHE_PREFIX = 'araru-web-';
+const CACHE_VERSION = 'v9';
 const CACHES = {
   shell: `${CACHE_PREFIX}shell-${CACHE_VERSION}`,
   catalog: `${CACHE_PREFIX}catalog-${CACHE_VERSION}`,
@@ -13,6 +11,7 @@ const CACHES = {
 const APP_SHELL = [
   '/',
   '/index.html',
+  '/theme-init.js',
   '/manifest.webmanifest',
   '/favicon.ico',
   '/icons/icon-192.png',
@@ -20,13 +19,13 @@ const APP_SHELL = [
   '/brand/araru-favicon.png'
 ];
 let apiOrigin = self.location.origin;
-let apiPathPrefix = '/api';
+let apiPathPrefix = '/api/v1';
 const CONFIG_REQUEST = new Request(new URL('/__biblioteca_api_config__', self.location.origin));
 
 const applyApiConfig = (apiBaseUrl) => {
   const configured = new URL(apiBaseUrl);
   apiOrigin = configured.origin;
-  apiPathPrefix = configured.pathname.replace(/\/$/, '') || '/api';
+  apiPathPrefix = configured.pathname.replace(/\/$/, '') || '/api/v1';
 };
 
 const apiConfigReady = caches.open(CACHES.config)
@@ -43,13 +42,13 @@ const apiPath = (url) => {
 };
 
 const isCatalogRequest = (url) => (
-  apiPath(url) === '/livros'
-  || apiPath(url) === '/categorias'
-  || apiPath(url)?.startsWith('/categorias/')
+  apiPath(url) === '/works'
+  || apiPath(url) === '/libraries'
+  || apiPath(url)?.startsWith('/libraries/')
 );
 
 const isCoverRequest = (url) => (
-  /^\/livros\/[^/]+\/capa$/.test(apiPath(url) || '')
+  /^\/works\/[^/]+\/cover$/.test(apiPath(url) || '')
 );
 
 const isStaticAsset = (request) => (
@@ -59,8 +58,7 @@ const isStaticAsset = (request) => (
 const isBookPayload = (request, url) => (
   url.origin === apiOrigin && (
     request.headers.has('range')
-    || url.pathname.startsWith('/arquivos/')
-    || /\/livros\/[^/]+\/(conteudo|paginas?|recursos)(\/|$)/.test(apiPath(url) || '')
+    || /\/works\/[^/]+\/(content|pages|resources)(\/|$)/.test(apiPath(url) || '')
   )
 );
 

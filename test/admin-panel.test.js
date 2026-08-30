@@ -14,6 +14,6 @@ test('admin panel possui rotas modulares, guard de role e navegação responsiva
   assert.match(layout, /lg:hidden/);
   assert.match(layout, /aria-label/);
   assert.deepEqual(navigation.adminNavigation.map((item) => item.key), [
-    'overview','general','appearance','users','profiles','libraries','storage','metadata','jobs','backup','security','system'
+    'general','users','roles','libraries','storage','metadata','jobs','backup','security','system'
   ]);
 });

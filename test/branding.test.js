@@ -17,7 +17,7 @@ test('apresenta Araru como produto no HTML, manifest e componentes principais', 
   assert.match(access, />Araru</);
 });
 
-test('preserva namespaces legados que protegem dados e downloads existentes', async () => {
+test('preserva dados locais e usa o namespace de cache do Araru', async () => {
   const [storage, offline, worker] = await Promise.all([
     readFile(new URL('../src/utils/localStorage.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/lib/offlineLibrary.js', import.meta.url), 'utf8'),
@@ -25,7 +25,8 @@ test('preserva namespaces legados que protegem dados e downloads existentes', as
   ]);
   assert.match(storage, /biblioteca:reading-progress:v1/);
   assert.match(offline, /biblioteca-digital-offline/);
-  assert.match(worker, /biblioteca-digital-/);
+  assert.match(worker, /araru-web-/);
+  assert.match(worker, /\/api\/v1/);
 });
 
 test('registra os assets visuais do Araru no HTML e no PWA', async () => {

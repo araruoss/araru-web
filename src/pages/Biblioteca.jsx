@@ -2,19 +2,15 @@ import {
   AlertCircle,
   ChevronRight,
   Filter,
-  Grid2X2,
-  List,
   RefreshCcw,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import FiltrosBiblioteca, { FILTROS_VAZIOS } from '../components/FiltrosBiblioteca.jsx';
 import Header from '../components/Header.jsx';
-import LibrarySidebar from '../components/LibrarySidebar.jsx';
 import LivroDetalhesModal from '../components/LivroDetalhesModal.jsx';
 import SlidingPanel from '../components/SlidingPanel.jsx';
 import VirtualBookGrid from '../components/VirtualBookGrid.jsx';
-import ReadingHome from '../components/ReadingHome.jsx';
 import SavedViews from '../components/SavedViews.jsx';
 import ReaderPreferences from '../components/ReaderPreferences.jsx';
 import OfflineManager from '../components/OfflineManager.jsx';
@@ -65,10 +61,21 @@ function encontrarNoNaArvore(tree, path) {
 
 export default function Biblioteca() {
   const { t } = useLocale();
-  const { livros, categorias, arvoreCategorias, loading, error, recarregar, tentarNovamente } = useLivros();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const initial = useMemo(() => Object.fromEntries(searchParams.entries()), []);
+  const serverFilters = useMemo(() => ({
+    libraryId: searchParams.get('libraryId') || undefined,
+    author: searchParams.get('author') || searchParams.get('autor') || undefined,
+    category: searchParams.get('category') || searchParams.get('categoria') || undefined,
+    format: searchParams.get('format') || searchParams.get('formato') || undefined,
+    favorite: (searchParams.get('favorite') ?? searchParams.get('favorito')) || undefined,
+    completed: searchParams.get('completed') || undefined,
+    sort: searchParams.get('sort') || 'title',
+    order: searchParams.get('order') || 'asc',
+    q: searchParams.get('q') || undefined
+  }), [searchParams]);
+  const { livros, categorias, arvoreCategorias, loading, error, recarregar, tentarNovamente } = useLivros(serverFilters);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState('Todos');
   const [subcategoriaSelecionada, setSubcategoriaSelecionada] = useState('');
   const [caminhoCategoria, setCaminhoCategoria] = useState([]);
@@ -79,9 +86,7 @@ export default function Biblioteca() {
   const [livroSelecionado, setLivroSelecionado] = useState(null);
   const [abaAtiva, setAbaAtiva] = useState(initial.secao || (initial.categoria ? 'categorias' : 'todos'));
   const [ordenacao, setOrdenacao] = useState(initial.ordem || 'titulo');
-  const [modoVisualizacao, setModoVisualizacao] = useState(initial.modo === 'lista' ? 'list' : 'grid');
   const [painelAtivo, setPainelAtivo] = useState(null);
-  const [sidebarExpandida, setSidebarExpandida] = useState(false);
   const applyingUrlRef = useRef(false);
 
   useEffect(() => {
@@ -91,7 +96,6 @@ export default function Biblioteca() {
     setBusca(searchParams.get('q') || '');
     setAbaAtiva(searchParams.get('secao') || (pathFromUrl ? 'categorias' : 'todos'));
     setOrdenacao(searchParams.get('ordem') || 'titulo');
-    setModoVisualizacao(searchParams.get('modo') === 'lista' ? 'list' : 'grid');
     setIncluirSubpastas(searchParams.get('subpastas') !== '0');
     setFiltros({ ...FILTROS_VAZIOS, autor: searchParams.get('autor') || '', editora: searchParams.get('editora') || '', tag: searchParams.get('tag') || '', formato: searchParams.get('formato') || '', idioma: searchParams.get('idioma') || '', anoMin: searchParams.get('anoMin') || '', anoMax: searchParams.get('anoMax') || '' });
   }, [searchParams]);
@@ -103,11 +107,10 @@ export default function Biblioteca() {
     if (busca) next.set('q', busca);
     if (abaAtiva !== 'todos') next.set('secao', abaAtiva);
     if (ordenacao !== 'titulo') next.set('ordem', ordenacao);
-    if (modoVisualizacao !== 'grid') next.set('modo', 'lista');
     if (!incluirSubpastas) next.set('subpastas', '0');
     for (const [key, value] of Object.entries(filtros)) if (value) next.set(key, value);
     if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
-  }, [abaAtiva, busca, caminhoCategoria, filtros, incluirSubpastas, modoVisualizacao, ordenacao, searchParams, setSearchParams]);
+  }, [abaAtiva, busca, caminhoCategoria, filtros, incluirSubpastas, ordenacao, searchParams, setSearchParams]);
 
   useEffect(() => {
     const key = `biblioteca:scroll:${location.pathname || '/'}:${searchParams.toString()}`;
@@ -136,12 +139,6 @@ export default function Biblioteca() {
     setSearchParams(next);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [searchParams, setSearchParams]);
-
-  const navegarCategoriaNoDrawer = useCallback((path) => {
-    navegarCategoria(path);
-    const node = encontrarNoNaArvore(arvoreCategorias, path);
-    if (path.length && !node?.children?.length) setPainelAtivo(null);
-  }, [arvoreCategorias, navegarCategoria]);
 
   const historico = useMemo(() => getUltimosLidos(), []);
   const favoritosSet = useMemo(() => new Set(favoritos), [favoritos]);
@@ -315,9 +312,6 @@ export default function Biblioteca() {
     ? formatarQuantidade(totalPrincipal, 'categoria', 'categorias')
     : formatarQuantidade(totalPrincipal, 'livro', 'livros');
 
-  const trilhoAtivo =
-    abaAtiva === 'favoritos' ? 'favoritos' : abaAtiva === 'recentes' ? 'recentes' : 'biblioteca';
-
   const mensagemVazia =
     abaAtiva === 'favoritos'
       ? t('library.emptyFavorites')
@@ -327,31 +321,9 @@ export default function Biblioteca() {
 
   return (
     <div className="library-shell min-h-screen text-slate-950 transition-colors dark:text-white">
-      <Header
-        busca={busca}
-        onBuscaChange={handleBuscaChange}
-        title={t('library.title')}
-        onOpenNavigation={() => setPainelAtivo('navegacao')}
-      />
+      <Header />
 
-      <div className="mx-auto flex max-w-[1560px] gap-4 px-3 pb-8 sm:px-5 lg:px-8">
-        <div className="hidden pt-5 lg:block">
-          <LibrarySidebar
-            expanded={sidebarExpandida}
-            activeKey={trilhoAtivo}
-            onToggleExpanded={() => setSidebarExpandida((value) => !value)}
-            onOpenSettings={() => setPainelAtivo('configuracoes')}
-            onSelectHome={() => handleTrocarAba('todos')}
-            onSelectRecent={() => handleTrocarAba('recentes')}
-            onSelectFavorites={() => handleTrocarAba('favoritos')}
-            onOpenCategoryTree={() => { handleTrocarAba('todos'); setPainelAtivo('categorias'); }}
-            categoryTree={arvoreCategorias}
-            categoryPath={caminhoCategoria}
-            onNavigateCategory={navegarCategoria}
-          />
-        </div>
-
-        <main className="min-w-0 flex-1 pt-6 lg:pt-8">
+      <div className="mx-auto max-w-[1560px] px-3 pb-8 sm:px-5 lg:px-8"><main className="min-w-0 pt-6 lg:pt-8">
           <div className="mx-auto max-w-[1500px] space-y-7">
             <section className="space-y-4">
               <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
@@ -412,10 +384,6 @@ export default function Biblioteca() {
                     <option value="recentes">{t('library.newest')}</option>
                   </select>
                   </label>
-                  <div className="inline-flex rounded-full border border-slate-200 p-1 dark:border-slate-800" aria-label="Modo de visualização">
-                    <button type="button" onClick={() => setModoVisualizacao('grid')} aria-label="Exibir em grade" aria-pressed={modoVisualizacao === 'grid'} className={`grid h-9 w-9 place-items-center rounded-full ${modoVisualizacao === 'grid' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950' : ''}`}><Grid2X2 className="h-4 w-4" /></button>
-                    <button type="button" onClick={() => setModoVisualizacao('list')} aria-label="Exibir em lista" aria-pressed={modoVisualizacao === 'list'} className={`grid h-9 w-9 place-items-center rounded-full ${modoVisualizacao === 'list' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950' : ''}`}><List className="h-4 w-4" /></button>
-                  </div>
                 </div>
               </section>
             )}
@@ -431,14 +399,12 @@ export default function Biblioteca() {
               </div>
             )}
 
-            {abaAtiva === 'todos' && !busca && !caminhoCategoria.length && filtrosAtivos === 0 && <ReadingHome livros={livros} />}
-
             {loading ? (
               <SkeletonGrid />
             ) : mostrarResumoCategorias ? (
               <ResumoCategorias categorias={categoriasDisponiveis} onSelect={handleSelecionarCategoria} />
             ) : livrosOrdenados.length > 0 ? (
-              <VirtualBookGrid livros={livrosOrdenados} mode={modoVisualizacao} favoritoIds={favoritosSet} onToggleFavorito={handleToggleFavorito} onOpen={setLivroSelecionado} onShowCategory={handleSelecionarCategoria} />
+              <VirtualBookGrid livros={livrosOrdenados} favoritoIds={favoritosSet} onToggleFavorito={handleToggleFavorito} onOpen={setLivroSelecionado} onShowCategory={handleSelecionarCategoria} />
             ) : (
               <div className="grid min-h-[260px] place-items-center rounded-[1.75rem] border border-dashed border-slate-300 bg-white/80 p-8 text-center dark:border-slate-700 dark:bg-slate-900/70">
                 <div className="space-y-2">
@@ -450,60 +416,7 @@ export default function Biblioteca() {
               </div>
             )}
           </div>
-        </main>
-      </div>
-
-      <SlidingPanel
-        open={painelAtivo === 'navegacao'}
-        side="left"
-        title={t('navigation.navigation')}
-        onClose={() => setPainelAtivo(null)}
-      >
-        <LibrarySidebar
-          mobile
-          expanded
-          activeKey={trilhoAtivo}
-          onToggleExpanded={() => {}}
-          onOpenSettings={() => setPainelAtivo('configuracoes')}
-          onSelectHome={() => {
-            handleTrocarAba('todos');
-            setPainelAtivo(null);
-          }}
-          onSelectRecent={() => {
-            handleTrocarAba('recentes');
-            setPainelAtivo(null);
-          }}
-          onSelectFavorites={() => {
-            handleTrocarAba('favoritos');
-            setPainelAtivo(null);
-          }}
-          onOpenCategoryTree={() => {
-            handleTrocarAba('todos');
-            setPainelAtivo('categorias');
-          }}
-          categoryTree={arvoreCategorias}
-          categoryPath={caminhoCategoria}
-          onNavigateCategory={navegarCategoriaNoDrawer}
-        />
-      </SlidingPanel>
-
-      <SlidingPanel open={painelAtivo === 'categorias'} side="left" title={t('navigation.categories')} onClose={() => setPainelAtivo(null)}>
-        <LibrarySidebar
-          mobile
-          expanded
-          categoryOnly
-          activeKey="biblioteca"
-          onToggleExpanded={() => {}}
-          onOpenSettings={() => setPainelAtivo('configuracoes')}
-          onSelectHome={() => { handleTrocarAba('todos'); setPainelAtivo(null); }}
-          onSelectRecent={() => { handleTrocarAba('recentes'); setPainelAtivo(null); }}
-          onSelectFavorites={() => { handleTrocarAba('favoritos'); setPainelAtivo(null); }}
-          onOpenCategoryTree={() => {}}
-          categoryTree={arvoreCategorias}
-          categoryPath={caminhoCategoria}
-          onNavigateCategory={navegarCategoriaNoDrawer}
-        />
-      </SlidingPanel>
+        </main></div>
 
       <SlidingPanel
         open={painelAtivo === 'filtros'}

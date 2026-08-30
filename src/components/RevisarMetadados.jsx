@@ -1,58 +1,13 @@
-import { Check, Pencil, RefreshCw } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api.js';
 
-function autores(livro) {
-  return Array.isArray(livro.autor) ? livro.autor.join(', ') : livro.autor || 'Autor não informado';
-}
+function author(item) { return Array.isArray(item.autor) ? item.autor.join(', ') : item.autor || 'Author not informed'; }
 
 export default function RevisarMetadados({ onEdit, onChanged }) {
-  const [livros, setLivros] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const carregar = useCallback(() => {
-    setLoading(true);
-    return apiFetch('/livros/revisar-metadados')
-      .then((response) => (response.ok ? response.json() : { data: [] }))
-      .then((payload) => setLivros(payload.data || []))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => { carregar(); }, [carregar]);
-
-  async function aceitar(livro) {
-    await apiFetch(`/livros/${encodeURIComponent(livro.id)}/atualizar`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aceitarRevisao: true })
-    });
-    await carregar();
-    onChanged?.();
-  }
-
-  async function buscarNovamente(livro) {
-    await apiFetch(`/livros/${encodeURIComponent(livro.id)}/enriquecer?mode=force`, { method: 'POST' });
-    await carregar();
-    onChanged?.();
-  }
-
-  if (loading) return <p className="text-sm text-slate-500 dark:text-slate-400">Carregando itens para revisão…</p>;
-  if (!livros.length) return <p className="text-sm text-slate-500 dark:text-slate-400">Nenhum metadado precisa de revisão agora.</p>;
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-slate-500 dark:text-slate-400">Confirme ou ajuste apenas os itens com identificação parcial.</p>
-      {livros.map((livro) => (
-        <article key={livro.id} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">{livro.originalFilename || livro.nome}</p>
-          <h3 className="mt-2 text-sm font-semibold text-slate-950 dark:text-white">{livro.nome}</h3>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{autores(livro)}</p>
-          <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">Confiança: {Math.round((livro.metadataConfidence || 0) * 100)}% · {livro.metadataSource || 'identificação local'}</p>
-          {livro.candidateMatches?.length > 0 && <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Alternativa: {livro.candidateMatches[0].nome}</p>}
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" onClick={() => aceitar(livro)} className="inline-flex items-center gap-1.5 rounded-full bg-slate-950 px-3 py-2 text-xs font-semibold text-white dark:bg-white dark:text-slate-950"><Check className="h-3.5 w-3.5" />Aceitar</button>
-            <button type="button" onClick={() => onEdit?.(livro)} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold dark:border-slate-700"><Pencil className="h-3.5 w-3.5" />Editar</button>
-            <button type="button" onClick={() => buscarNovamente(livro)} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold dark:border-slate-700"><RefreshCw className="h-3.5 w-3.5" />Buscar novamente</button>
-          </div>
-        </article>
-      ))}
-    </div>
-  );
+  const [items, setItems] = useState([]); const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 }); const [page, setPage] = useState(1); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
+  const load = useCallback(() => { setLoading(true); return apiFetch(`/admin/metadata/review?page=${page}&pageSize=8`).then((response) => { if (!response.ok) throw new Error('Unable to load metadata reviews.'); return response.json(); }).then((payload) => { setItems(payload.items || []); setPagination(payload.pagination || { page, pages: 1, total: 0 }); }).catch((cause) => setError(cause.message)).finally(() => setLoading(false)); }, [page]);
+  useEffect(() => { load(); }, [load]);
+  async function accept(item) { await apiFetch(`/admin/works/${encodeURIComponent(item.id)}/metadata`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aceitarRevisao: true }) }); await load(); onChanged?.(); }
+  return <section className="space-y-4 rounded-2xl border border-[var(--app-border)] bg-[var(--app-panel)] p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold">Metadata review</h2><p className="mt-1 text-sm text-[var(--text-muted)]">Review only records with partial identification.</p></div><span className="rounded-full bg-[var(--app-bg)] px-3 py-1 text-xs text-[var(--text-muted)]">{pagination.total || 0} pending</span></div>{error && <p role="alert" className="text-sm text-[var(--danger)]">{error}</p>}{loading ? <p className="py-8 text-sm text-[var(--text-muted)]">Loading metadata…</p> : !items.length ? <p className="py-8 text-sm text-[var(--text-muted)]">No metadata needs review right now.</p> : <div className="space-y-3">{items.map((item) => <article key={item.id} className="rounded-xl border border-[var(--app-border)] p-4"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">{item.originalFilename || item.filename || item.title || item.nome}</p><h3 className="mt-2 text-sm font-semibold">{item.title || item.nome || 'Untitled work'}</h3><p className="mt-1 text-sm text-[var(--text-muted)]">{author(item)}</p><p className="mt-2 text-xs text-[var(--text-muted)]">Confidence: {Math.round(Number(item.confidence ?? item.metadataConfidence ?? 0) * 100)}% · {item.status || item.metadataSource || 'local identification'}</p><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => accept(item)} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--brand-primary)] px-3 py-2 text-xs font-semibold text-[var(--accent-foreground)]"><Check className="h-3.5 w-3.5" />Accept</button><button type="button" onClick={() => onEdit?.(item)} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--app-border)] px-3 py-2 text-xs font-semibold"><Pencil className="h-3.5 w-3.5" />Edit</button></div></article>)}</div>}<div className="flex items-center justify-between border-t border-[var(--app-border)] pt-4"><span className="text-xs text-[var(--text-muted)]">Page {pagination.page || page} of {Math.max(1, pagination.pages || 1)}</span><div className="flex gap-2"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--app-border)] disabled:opacity-40" aria-label="Previous page"><ChevronLeft className="h-4 w-4" /></button><button type="button" disabled={page >= (pagination.pages || 1)} onClick={() => setPage((value) => value + 1)} className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--app-border)] disabled:opacity-40" aria-label="Next page"><ChevronRight className="h-4 w-4" /></button></div></div></section>;
 }

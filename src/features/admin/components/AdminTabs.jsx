@@ -1,0 +1,10 @@
+import { useEffect, useId, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
+
+export default function AdminTabs({ tabs, param = 'tab', defaultTab = tabs[0]?.[0], children }) {
+  const [params, setParams] = useSearchParams(); const active = tabs.some(([key]) => key === params.get(param)) ? params.get(param) : defaultTab; const baseId = useId(); const refs = useRef([]);
+  const select = (key) => { const next = new URLSearchParams(params); if (key === defaultTab) next.delete(param); else next.set(param, key); setParams(next); };
+  const onKeyDown = (event, index) => { let next = index; if (event.key === 'ArrowRight') next = (index + 1) % tabs.length; else if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length; else if (event.key === 'Home') next = 0; else if (event.key === 'End') next = tabs.length - 1; else return; event.preventDefault(); refs.current[next]?.focus(); select(tabs[next][0]); };
+  useEffect(() => { const key = params.get(param); if (key && !tabs.some(([tab]) => tab === key)) select(defaultTab); }, [params, param, defaultTab, tabs]);
+  return <div className="space-y-6"><div role="tablist" aria-label="Seções da página" className="flex gap-1 overflow-x-auto border-b border-[var(--app-border)]">{tabs.map(([key, label], index) => <button type="button" role="tab" aria-selected={active === key} aria-controls={`${baseId}-${key}`} id={`${baseId}-tab-${key}`} tabIndex={active === key ? 0 : -1} ref={(node) => { refs.current[index] = node; }} onClick={() => select(key)} onKeyDown={(event) => onKeyDown(event, index)} key={key} className={`min-h-11 shrink-0 border-b-2 px-3 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]/40 ${active === key ? 'border-[var(--brand-primary)] text-[var(--text-main)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>{label}</button>)}</div>{children && tabs.map(([key]) => active === key ? <div key={key} role="tabpanel" id={`${baseId}-${key}`} aria-labelledby={`${baseId}-tab-${key}`} tabIndex={0}>{children(key)}</div> : null)}</div>;
+}

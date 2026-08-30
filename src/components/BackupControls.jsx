@@ -12,11 +12,11 @@ export default function BackupControls() {
     setBusy(true);
     setStatus('Verificando backup…');
     try {
-      const verification = await apiFetch('/backup/verify', { method:'POST',headers:{'Content-Type':'application/gzip'},body:file });
+      const verification = await apiFetch('/admin/backup/verify', { method:'POST',headers:{'Content-Type':'application/gzip'},body:file });
       const verificationData=await verification.json(); if(!verification.ok)throw new Error(verificationData.message||'Backup inválido.');
       if (!window.confirm(`Backup íntegro (schema ${verificationData.data.schemaVersion}). Restaurar e substituir os dados atuais?`)) return;
       setStatus('Restaurando backup…');
-      const response = await apiFetch('/backup/restore', {
+      const response = await apiFetch('/admin/backup/restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/gzip', 'X-Confirm-Restore': 'RESTORE' },
         body: file
@@ -35,7 +35,7 @@ export default function BackupControls() {
 
   return (
     <div className="space-y-2">
-      <a href={apiUrl('/backup')} download className="category-panel-item">
+      <a href={apiUrl('/admin/backup')} download className="category-panel-item">
         <span className="min-w-0 text-left">
           <span className="block text-sm font-semibold">Exportar backup</span>
           <span className="mt-1 block text-xs text-slate-400 dark:text-slate-500">Metadados, progresso, índice e configurações</span>

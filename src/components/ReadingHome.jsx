@@ -1,21 +1,39 @@
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { bookCoverUrl, fetchJson, queryKeys } from '../lib/api.js';
-import { getAllReadingProgress, getFavoritos, getUltimosLidos } from '../utils/localStorage.js';
 import { useLocale } from '../context/LocaleContext.jsx';
+import { getAllReadingProgress, getFavoritos, getReadingStats, getUltimosLidos } from '../utils/localStorage.js';
+import { MediaRail } from './content/MediaRail';
 
-function MiniShelf({ title, items, progress = {}, t }) {
-  if (!items.length) return null;
-  return <section><h2 className="mb-3 text-lg font-semibold">{title}</h2><div className="flex gap-3 overflow-x-auto pb-2">{items.slice(0,8).map((book)=><Link key={book.id} to={`/livro/${encodeURIComponent(book.id)}`} state={{livro:book,from:{pathname:'/',search:window.location.search}}} className="w-28 shrink-0 sm:w-32"><div className="aspect-[2/3] overflow-hidden rounded-2xl bg-slate-800"><img src={bookCoverUrl(book)} alt={book.nome} loading="lazy" decoding="async" className="h-full w-full object-cover"/></div><p className="mt-2 line-clamp-2 text-sm font-medium">{book.nome}</p>{progress[book.id]&&<><div className="mt-1 h-1 overflow-hidden rounded bg-slate-200 dark:bg-slate-800"><span className="block h-full bg-cyan-500" style={{width:`${Math.round((progress[book.id].progress||0)*100)}%`}}/></div><p className="mt-1 text-[11px] text-slate-500">{t('library.continueProgress',{progress:Math.round((progress[book.id].progress||0)*100)})}</p></>}</Link>)}</div></section>;
+function formatReadingTime(milliseconds, t) {
+  if (milliseconds < 60_000) return t('stats.lessMinute');
+  const hours = Math.floor(milliseconds / 3_600_000);
+  const minutes = Math.floor((milliseconds % 3_600_000) / 60_000);
+  return hours ? `${hours}h ${minutes}min` : `${minutes} min`;
 }
-function SeriesShelf({items,progress,books,t}){if(!items.length)return null;return <section><h2 className="mb-3 text-lg font-semibold">{t('library.activeSeries')}</h2><div className="flex gap-3 overflow-x-auto pb-2">{items.slice(0,8).map(series=>{const next=series.items.find(item=>(progress[item.fileId]?.progress||0)<.98),book=books.get(next?.fileId);return <Link key={series.id} to={`/series/${encodeURIComponent(series.id)}`} className="w-40 shrink-0 rounded-2xl border border-slate-200 p-3 dark:border-slate-800"><div className="aspect-[3/2] overflow-hidden rounded-xl bg-slate-800">{book&&<img src={bookCoverUrl(book)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover"/>}</div><strong className="mt-2 block truncate text-sm">{series.name}</strong><span className="text-[11px] text-slate-500">{next?.volume?t('library.nextVolume',{volume:next.volume}):t('library.volumes',{count:series.volumes})}</span></Link>;})}</div></section>}
-function CategoryLinks({livros,t}){const counts=new Map();for(const book of livros){const name=book.categoryPath?.[0]||book.categoria;if(name)counts.set(name,(counts.get(name)||0)+1);}const categories=[...counts].sort((a,b)=>b[1]-a[1]).slice(0,6);if(!categories.length)return null;return <section><h2 className="mb-3 text-lg font-semibold">{t('library.relevantCategories')}</h2><div className="flex flex-wrap gap-2">{categories.map(([name,total])=><Link key={name} to={`/?categoria=${encodeURIComponent(name)}&secao=categorias`} className="inline-flex min-h-11 items-center rounded-full border border-slate-200 px-4 text-sm dark:border-slate-800">{name}<span className="ml-2 text-xs text-slate-500">{total}</span></Link>)}</div></section>}
-export default function ReadingHome({ livros }) {
+
+export default function ReadingHome({ livros, onOpen, onToggleFavorite }) {
   const { t } = useLocale();
-  const seriesQuery=useQuery({queryKey:queryKeys.series,queryFn:({signal})=>fetchJson('/series',{signal}),staleTime:5*60_000});
-  const byId=new Map(livros.map((book)=>[book.id,book])), progress=getAllReadingProgress();
-  const continuing=Object.entries(progress).filter(([,value])=>value.progress>0&&value.progress<.98).sort((a,b)=>(b[1].updatedAt||0)-(a[1].updatedAt||0)).map(([id])=>byId.get(id)).filter(Boolean);
-  const recent=[...livros].sort((a,b)=>new Date(b.modifiedTime||b.fileMtime||0)-new Date(a.modifiedTime||a.fileMtime||0)); const favorites=livros.filter((book)=>new Set(getFavoritos()).has(book.id)); const opened=getUltimosLidos().map((item)=>byId.get(item.id)).filter(Boolean);
-  const activeSeries=(seriesQuery.data?.data||[]).filter(series=>series.items?.some(item=>{const value=progress[item.fileId]?.progress||0;return value>0&&value<.98;}));
-  return <div className="space-y-8"><MiniShelf title={t('library.continueReading')} items={continuing} progress={progress} t={t}/><MiniShelf title={t('library.recentlyAdded')} items={recent} t={t}/><MiniShelf title={t('navigation.favorites')} items={favorites} t={t}/><SeriesShelf items={activeSeries} progress={progress} books={byId} t={t}/><CategoryLinks livros={livros} t={t}/>{!continuing.length&&<MiniShelf title={t('library.recentlyOpened')} items={opened} t={t}/>}</div>;
+  const progress = getAllReadingProgress();
+  const stats = getReadingStats();
+  const favoriteIds = new Set(getFavoritos());
+  const byId = new Map(livros.map((book) => [book.id, book]));
+  const continuing = Object.entries(progress)
+    .filter(([, value]) => value.progress > 0 && value.progress < 0.98)
+    .sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0))
+    .map(([id, value]) => ({ ...byId.get(id), readingProgress: value.progress }))
+    .filter((book) => book.id);
+  const recent = [...livros].sort((a, b) => new Date(b.modifiedTime || b.fileMtime || 0) - new Date(a.modifiedTime || a.fileMtime || 0));
+  const favorites = livros.filter((book) => favoriteIds.has(book.id));
+  const opened = getUltimosLidos().map((item) => byId.get(item.id)).filter(Boolean).slice(0, 12);
+  const readingTime = Object.values(stats.days).reduce((total, day) => total + Number(day.activeMs || 0), 0);
+  const hasInsights = stats.completedBookIds.length > 0 || continuing.length > 0 || readingTime > 0;
+  const railProps = { favoriteIds, onOpen, onToggleFavorite };
+
+  return <div className="space-y-9">
+    {continuing.length > 0 && <MediaRail title={t('library.continueReading')} works={continuing} actionLabel={t('home.viewHistory')} actionTo="/history" {...railProps} />}
+    <MediaRail title={t('library.recentlyAdded')} works={recent} actionLabel={t('home.viewLibrary')} actionTo="/library" {...railProps} />
+    {favorites.length > 0 && <MediaRail title={t('navigation.favorites')} works={favorites} actionLabel={t('home.viewLibrary')} actionTo="/library?favorite=true" {...railProps} />}
+    {opened.length > 0 && <MediaRail title={t('library.recentlyOpened')} works={opened} actionLabel={t('home.viewHistory')} actionTo="/history" {...railProps} />}
+    {hasInsights && <section className="rounded-md border border-border-subtle bg-surface px-4 py-3 sm:px-5"><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-body-sm text-secondary"><strong className="font-semibold text-primary">{t('stats.homeTitle')}</strong><span className="mx-2 text-muted">·</span>{t('stats.summary', { completed: stats.completedBookIds.length, inProgress: continuing.length, time: formatReadingTime(readingTime, t) })}</p><Link to="/estatisticas" className="shrink-0 text-caption font-medium text-link hover:text-link-hover">{t('stats.open')}</Link></div></section>}
+    {!continuing.length && !opened.length && !recent.length && <p className="text-body-sm text-muted">{t('home.empty')}</p>}
+  </div>;
 }
