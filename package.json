@@ -9,6 +9,8 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --test test/*.test.js",
+    "security:test": "node --test test/reader-security.test.js",
+    "security:check": "node scripts/check-security-sinks.js",
     "typecheck": "tsc --noEmit",
     "lint": "node scripts/lint.js",
     "test:e2e": "node test/e2e-smoke.js",
