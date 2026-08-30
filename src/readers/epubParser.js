@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { sanitizeReaderHtml, sanitizeReaderUrl } from './sanitize.js';
 
 function normalizarCaminho(caminho = '') {
   const resultado = [];
@@ -39,7 +40,8 @@ export async function parseEpub(buffer) {
     for (const imagem of documento.querySelectorAll('img, image')) {
       const atributo = imagem.hasAttribute('href') ? 'href' : 'src';
       const valor = imagem.getAttribute(atributo) || imagem.getAttribute('xlink:href');
-      if (!valor || valor.startsWith('data:')) continue;
+      const seguro = sanitizeReaderUrl(valor, { allowDataImage: true });
+      if (!seguro || seguro.startsWith('data:')) continue;
       const nome = resolverCaminho(item.href, valor.split('#')[0]);
       const arquivo = zip.file(nome);
       if (!arquivo) continue;
@@ -48,7 +50,7 @@ export async function parseEpub(buffer) {
       if (imagem.hasAttribute('xlink:href')) imagem.setAttribute('xlink:href', dataUrl);
     }
     const corpo = documento.querySelector('body');
-    if (corpo) secoes.push(`<section class="epub-secao">${corpo.innerHTML}</section>`);
+    if (corpo) secoes.push(`<section class="epub-secao">${sanitizeReaderHtml(corpo.innerHTML)}</section>`);
   }
   return `<style>${estilos.join('\n')}\n.epub-secao { width: 100%; }\n.epub-secao img, .epub-secao svg { width: var(--reader-media-width, 100%) !important; max-width: none !important; height: auto !important; display: block; }</style>${secoes.join('\n')}`;
 }

@@ -12,6 +12,7 @@ import { useReaderZoom } from '../readers/useReaderZoom.js';
 import { recordReaderMetric } from '../lib/telemetry.js';
 import { backendUrl, bookContentUrl, bookPagesUrl } from '../lib/api.js';
 import { useLocale } from '../context/LocaleContext.jsx';
+import { sanitizeReaderHtml } from '../readers/sanitize.js';
 
 const PAGE_TURN_STORAGE_KEY = 'biblioteca:page-turn-mode';
 const TEXT_THEMES = {
@@ -747,6 +748,7 @@ function EpubReader({ livro, html, telaCheia, onToggleTelaCheia, onExit }) {
   const [theme, setTheme] = useState(() => getReadingProgress(livro.id)?.theme || 'claro');
   const { controlsVisible, showControls, toggleControls } = useReaderControls();
   const textTheme = TEXT_THEMES[theme] || TEXT_THEMES.claro;
+  const safeHtml = useMemo(() => sanitizeReaderHtml(html || '<p>Carregando EPUB...</p>'), [html]);
 
   const salvarPosicao = useCallback((element) => {
     const maxScroll = Math.max(0, element.scrollHeight - element.clientHeight);
@@ -794,7 +796,7 @@ function EpubReader({ livro, html, telaCheia, onToggleTelaCheia, onExit }) {
 
   return (
     <div ref={shellRef} onScroll={(event) => salvarPosicao(event.currentTarget)} {...zoomInteractionProps} className="reader-viewport h-full overflow-auto sm:p-4" style={{ backgroundColor: textTheme.background }}>
-      <article onClick={(event) => { if (!event.target.closest('a, button, input, select')) toggleControls(); }} className="mx-auto min-h-full w-full max-w-5xl px-4 py-4 sm:rounded-xl sm:p-10 sm:shadow-xl [&_.epub-secao]:mb-8 [&_img]:h-auto" style={{ fontSize: `${1.05 * zoom}rem`, lineHeight, backgroundColor: textTheme.background, color: textTheme.color, '--reader-media-width': `${100 * zoom}%` }} dangerouslySetInnerHTML={{ __html: html || '<p>Carregando EPUB...</p>' }} />
+      <article onClick={(event) => { if (!event.target.closest('a, button, input, select')) toggleControls(); }} className="mx-auto min-h-full w-full max-w-5xl px-4 py-4 sm:rounded-xl sm:p-10 sm:shadow-xl [&_.epub-secao]:mb-8 [&_img]:h-auto" style={{ fontSize: `${1.05 * zoom}rem`, lineHeight, backgroundColor: textTheme.background, color: textTheme.color, '--reader-media-width': `${100 * zoom}%` }} dangerouslySetInnerHTML={{ __html: safeHtml }} />
       {controlsVisible && <ReaderDock>
         <div className="flex items-center gap-1"><button type="button" onClick={() => navegar(-1)} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Trecho anterior"><ChevronLeft /></button>
         <span className="min-w-[88px] px-2 text-center text-sm font-medium tabular-nums">{Math.round(progress * 100)}%</span>
@@ -824,6 +826,7 @@ function MobiReader({ livro, html, status = 'idle', error = '', onRetry, telaChe
   const [theme, setTheme] = useState(() => getReadingProgress(livro.id)?.theme || 'claro');
   const { controlsVisible, showControls, toggleControls } = useReaderControls();
   const textTheme = TEXT_THEMES[theme] || TEXT_THEMES.claro;
+  const safeHtml = useMemo(() => sanitizeReaderHtml(html || `<p>${t('reader.mobiLoading')}</p>`), [html, t]);
 
   const salvarPosicao = useCallback((element) => {
     const maxScroll = Math.max(0, element.scrollHeight - element.clientHeight);
@@ -857,7 +860,7 @@ function MobiReader({ livro, html, status = 'idle', error = '', onRetry, telaChe
 
   return (
     <div ref={shellRef} onScroll={(event) => salvarPosicao(event.currentTarget)} {...zoomInteractionProps} className="reader-viewport h-full overflow-auto sm:p-4" style={{ backgroundColor: textTheme.background }}>
-      {status === 'error' ? <section role="alert" className="grid min-h-full place-items-center p-6 text-center text-white"><div><p className="font-semibold">{t('reader.mobiFailed')}</p><p className="mt-2 max-w-md text-sm text-white/65">{error || t('reader.mobiEmpty')}</p><button type="button" onClick={onRetry} className="mt-5 inline-flex min-h-11 items-center rounded-full bg-white px-4 text-sm font-semibold text-slate-950">{t('common.retry')}</button><button type="button" onClick={onExit} className="ml-2 min-h-11 rounded-full border border-white/20 px-4 text-sm">{t('common.back')}</button></div></section> : <article onClick={(event) => { if (!event.target.closest('a, button, input, select')) toggleControls(); }} className="mobi-conteudo mx-auto min-h-full w-full max-w-5xl px-4 py-4 sm:rounded-xl sm:p-10 sm:shadow-xl" style={{ fontSize: `${1.05 * zoom}rem`, lineHeight, backgroundColor: textTheme.background, color: textTheme.color, '--reader-media-width': `${100 * zoom}%` }} dangerouslySetInnerHTML={{ __html: html || `<p>${t('reader.mobiLoading')}</p>` }} />}
+      {status === 'error' ? <section role="alert" className="grid min-h-full place-items-center p-6 text-center text-white"><div><p className="font-semibold">{t('reader.mobiFailed')}</p><p className="mt-2 max-w-md text-sm text-white/65">{error || t('reader.mobiEmpty')}</p><button type="button" onClick={onRetry} className="mt-5 inline-flex min-h-11 items-center rounded-full bg-white px-4 text-sm font-semibold text-slate-950">{t('common.retry')}</button><button type="button" onClick={onExit} className="ml-2 min-h-11 rounded-full border border-white/20 px-4 text-sm">{t('common.back')}</button></div></section> : <article onClick={(event) => { if (!event.target.closest('a, button, input, select')) toggleControls(); }} className="mobi-conteudo mx-auto min-h-full w-full max-w-5xl px-4 py-4 sm:rounded-xl sm:p-10 sm:shadow-xl" style={{ fontSize: `${1.05 * zoom}rem`, lineHeight, backgroundColor: textTheme.background, color: textTheme.color, '--reader-media-width': `${100 * zoom}%` }} dangerouslySetInnerHTML={{ __html: safeHtml }} />}
       {controlsVisible && <ReaderDock>
         <div className="flex items-center gap-1"><button type="button" onClick={() => navegar(-1)} className="grid h-11 w-11 place-items-center rounded-[1rem] transition hover:bg-white/12" aria-label="Trecho anterior"><ChevronLeft /></button>
         <span className="min-w-[88px] px-2 text-center text-sm font-medium tabular-nums">{Math.round(progress * 100)}%</span>
