@@ -3,11 +3,12 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 test('admin panel possui rotas modulares, guard de role e navegação responsiva', async () => {
-  const [page, layout, navigation, app] = await Promise.all([
+  const [page, layout, navigation, app, libraries] = await Promise.all([
     readFile(new URL('../src/pages/Admin.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/features/admin/layouts/AdminLayout.jsx', import.meta.url), 'utf8'),
     import('../src/features/admin/adminNavigation.js'),
-    readFile(new URL('../src/App.jsx', import.meta.url), 'utf8')
+    readFile(new URL('../src/App.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/features/admin/pages/LibrariesPage.jsx', import.meta.url), 'utf8')
   ]);
   assert.match(page, /identity\.role!=='admin'/);
   assert.match(app, /path="\/admin\/\*"/);
@@ -16,4 +17,9 @@ test('admin panel possui rotas modulares, guard de role e navegação responsiva
   assert.deepEqual(navigation.adminNavigation.map((item) => item.key), [
     'general','users','roles','libraries','storage','metadata','jobs','backup','security','system'
   ]);
+  assert.match(libraries, /\/admin\/libraries\/.*\/sources/);
+  assert.match(libraries, /api\.post\('\/admin\/libraries'/);
+  assert.match(libraries, /api\.patch\(`/);
+  assert.match(libraries, /'pt-BR':/);
+  assert.match(libraries, /newSource: 'New source'/);
 });
