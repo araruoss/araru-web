@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/araruoss/araru-web/compare/v0.3.0...v0.3.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* **web:** restore UI/UX design system pipeline, responsive navigation, and reader resilience ([#25](https://github.com/araruoss/araru-web/issues/25)) ([159ec0e](https://github.com/araruoss/araru-web/commit/159ec0efb8a5b860d922cd90545a32c3c5f73232)), closes [#24](https://github.com/araruoss/araru-web/issues/24)
+
 ## [0.3.0](https://github.com/araruoss/araru-web/compare/v0.2.1...v0.3.0) (2026-08-31)
 
 
