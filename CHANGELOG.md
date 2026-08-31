@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/araruoss/araru-web/compare/v0.2.1...v0.3.0) (2026-08-31)
+
+
+### Features
+
+* **library:** add source administration UI ([07b61c9](https://github.com/araruoss/araru-web/commit/07b61c992b48870d31d00f70a79399fe269c7b69))
+
+
+### Bug Fixes
+
+* **build:** configure Tailwind PostCSS plugin ([bef3ec2](https://github.com/araruoss/araru-web/commit/bef3ec201015bea9379689d995693b0955ee0bbe))
+
 ## [0.2.1](https://github.com/araruoss/araru-web/compare/v0.2.0...v0.2.1) (2026-08-30)
 
 
