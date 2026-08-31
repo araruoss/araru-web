@@ -910,6 +910,8 @@ export default function Leitura() {
   const comicPointersRef = useRef(new Map());
   const comicPinchRef = useRef(null);
   const livroState = location.state?.livro || null;
+  const [fetchedWork, setFetchedWork] = useState(null);
+  const [fetchingWork, setFetchingWork] = useState(false);
   const reducedMotion = useReducedMotion();
   const openedAtRef = useRef(performance.now());
   const firstPageMetricRef = useRef(false);
@@ -923,6 +925,23 @@ export default function Leitura() {
     navigate('/', { replace: true });
   }, [location.pathname, location.state?.from, navigate]);
 
+  useEffect(() => {
+    if (!effectiveWorkId || livroState) return;
+    const livroDaBiblioteca = livros.find((item) => item.id === effectiveWorkId);
+    if (livroDaBiblioteca) return;
+
+    setFetchingWork(true);
+    apiFetch(`/works/${encodeURIComponent(effectiveWorkId)}`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error('not-found');
+        const data = await response.json();
+        const workData = data?.data || data?.work || data;
+        setFetchedWork(workData);
+      })
+      .catch(() => {})
+      .finally(() => setFetchingWork(false));
+  }, [effectiveWorkId, livroState, livros]);
+
   const livro = useMemo(() => {
     const livroDaBiblioteca = livros.find((item) => item.id === effectiveWorkId);
     if (livroDaBiblioteca && livroState) {
@@ -931,8 +950,8 @@ export default function Leitura() {
         ...livroDaBiblioteca
       };
     }
-    return livroDaBiblioteca || livroState;
-  }, [effectiveWorkId, livroState, livros]);
+    return livroDaBiblioteca || fetchedWork || livroState;
+  }, [effectiveWorkId, fetchedWork, livroState, livros]);
 
   useEffect(() => {
     if (livro) {
@@ -1237,7 +1256,7 @@ export default function Leitura() {
 
   return (
     <ReaderShell engine={readerEngine} capabilities={readerCapabilities}>
-      {loading && !livro ? (
+      {(loading || fetchingWork) && !livro ? (
         <div className="grid h-full w-full place-items-center text-sm text-white/70">{t('common.loading')}</div>
       ) : livro ? (
         <>

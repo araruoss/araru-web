@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.js";
 
 .reader-toolbar .grid {
   width: 2.25rem;
@@ -119,83 +118,6 @@ body {
   background: var(--background);
 }
 
-.library-topbar {
-  background: transparent;
-  backdrop-filter: blur(20px);
-}
-
-.topbar-shell {
-  border: 1px solid var(--app-border);
-  border-radius: 26px;
-  background: var(--app-bg-soft);
-  box-shadow: 0 12px 32px rgba(21, 24, 28, 0.06);
-  backdrop-filter: blur(20px);
-}
-
-.dark .topbar-shell {
-  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.24);
-}
-
-.topbar-title {
-  letter-spacing: -0.02em;
-}
-
-.topbar-brand-mark {
-  border-radius: 14px;
-}
-
-.topbar-separator {
-  height: 4px;
-  width: 4px;
-  flex-shrink: 0;
-  border-radius: 999px;
-  background: rgba(102, 113, 125, 0.45);
-}
-
-.topbar-actions {
-  border: 1px solid var(--app-border);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.52);
-}
-
-.dark .topbar-actions {
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.topbar-search-panel {
-  border: 1px solid var(--app-border);
-  border-radius: 24px;
-  background: var(--app-bg-soft);
-  box-shadow: 0 12px 32px rgba(21, 24, 28, 0.06);
-  backdrop-filter: blur(20px);
-}
-
-.brand-mark {
-  background: var(--surface-overlay);
-  border-radius: 16px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
-}
-
-.dark .brand-mark {
-  background: var(--surface-overlay);
-  color: var(--text-inverse);
-}
-
-.search-field {
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(24, 28, 32, 0.08);
-  border-radius: 999px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
-}
-
-.dark .search-field {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
-.quiet-action {
-  border-radius: 999px;
-}
 
 .library-rail {
   position: sticky;
@@ -622,96 +544,6 @@ body {
   .category-books-toolbar { padding-top: 0; }
   .category-toolbar-toggle { order: 3; width: 100%; margin-top: 3px; }
 }
-.history-hero {
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.3)),
-    rgba(255, 255, 255, 0.54);
-  box-shadow: var(--app-shadow);
-}
-
-.dark .history-hero {
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
-    rgba(255, 255, 255, 0.02);
-}
-
-.history-stat {
-  background: rgba(255, 255, 255, 0.62);
-}
-
-.dark .history-stat {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.history-entry {
-  display: grid;
-  gap: 18px;
-  align-items: center;
-  border: 1px solid var(--app-border);
-  border-radius: 30px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.46)),
-    rgba(255, 255, 255, 0.58);
-  padding: 18px;
-  box-shadow: var(--app-shadow);
-  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
-}
-
-.dark .history-entry {
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
-    rgba(255, 255, 255, 0.02);
-}
-
-.history-entry:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 22px 42px rgba(21, 24, 28, 0.12);
-}
-
-.dark .history-entry:hover {
-  box-shadow: 0 24px 42px rgba(0, 0, 0, 0.28);
-}
-
-.history-cover-shell {
-  width: 100%;
-  max-width: 128px;
-}
-
-.history-cover {
-  aspect-ratio: 2 / 3;
-}
-
-.history-entry-meta {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-}
-
-.history-entry-action {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  background: rgba(24, 28, 32, 0.08);
-  padding: 10px 14px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-main);
-}
-
-.dark .history-entry-action {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-@media (min-width: 768px) {
-  .history-entry {
-    grid-template-columns: 128px minmax(0, 1fr) auto;
-    padding: 22px;
-  }
-
-  .history-entry-meta {
-    justify-content: flex-end;
-  }
-}
 
 .font-serif {
   font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
@@ -768,70 +600,9 @@ html, body, #root { max-width: 100%; overflow-x: clip; }
 .admin-page select { width: auto; max-width: 100%; min-width: 10rem; min-height: 40px; border-radius: .5rem; }
 .admin-page :where(input, select, textarea, button):focus-visible { outline-width: 1px; outline-offset: 1px; }
 
-.access-password-field:focus-within {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
-.access-input-field:focus-within {
-  border-color: var(--focus-ring);
-  background-color: rgba(15, 23, 42, 0.72);
-}
-
-.access-input-field input:focus-visible {
-  outline: none;
-}
-
-.access-password-field input:focus-visible {
-  outline: none;
-}
-
-.access-grid {
-  background-image: linear-gradient(rgba(148, 163, 184, 0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.055) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: linear-gradient(to bottom, black, transparent 82%);
-}
-
-.access-home {
-  --access-bg: var(--background);
-  --access-text: var(--text-primary);
-  --access-muted: var(--text-secondary);
-  --access-surface: var(--surface-raised);
-  --access-input: var(--background-subtle);
-  --access-border: var(--border-subtle);
-  background-image: radial-gradient(circle at 12% 28%, rgba(0, 180, 216, 0.08), transparent 28%), radial-gradient(circle at 88% 78%, rgba(34, 116, 165, 0.08), transparent 30%);
-}
-
-.dark .access-home {
-  --access-bg: #0A192F;
-  --access-text: #E0F2FE;
-  --access-muted: #91A4B7;
-  --access-surface: #122B43;
-  --access-input: #0B1E34;
-  --access-border: #35536B;
-}
-
-.access-home .text-slate-100 { color: var(--access-text); }
-.access-home .text-slate-400,
-.access-home .text-slate-500 { color: var(--access-muted); }
-.access-home .access-card { background-color: var(--access-surface); border-color: var(--access-border); box-shadow: 0 16px 40px rgba(10, 25, 47, 0.12); }
-.access-home .access-input-field { background-color: var(--access-input); border-color: var(--access-border); }
-
-.access-card {
-  animation: access-card-in 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
 .media-rail { scrollbar-width: none; -ms-overflow-style: none; }
 .media-rail::-webkit-scrollbar { display: none; }
 
-@keyframes access-card-in {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .access-card { animation: none; }
-}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
