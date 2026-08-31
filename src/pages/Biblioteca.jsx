@@ -22,11 +22,11 @@ function SkeletonGrid() {
   return (
     <div className="grid grid-cols-2 gap-x-5 gap-y-10 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
       {Array.from({ length: 10 }).map((_, index) => (
-        <div key={index} className="animate-pulse">
-          <div className="aspect-[2/3] rounded-[1.5rem] bg-slate-200 dark:bg-slate-800" />
-          <div className="mt-4 space-y-2">
-            <div className="h-4 w-3/4 rounded-full bg-slate-200 dark:bg-slate-800" />
-            <div className="h-3 w-1/2 rounded-full bg-slate-200 dark:bg-slate-800" />
+        <div key={index} className="animate-pulse space-y-3">
+          <div className="aspect-[2/3] rounded-xl bg-surface-raised" />
+          <div className="space-y-2">
+            <div className="h-4 w-3/4 rounded-md bg-surface-raised" />
+            <div className="h-3 w-1/2 rounded-md bg-surface-raised" />
           </div>
         </div>
       ))}
@@ -323,25 +323,26 @@ export default function Biblioteca() {
     <div className="library-shell min-h-screen text-slate-950 transition-colors dark:text-white">
       <Header />
 
-      <div className="mx-auto max-w-[1560px] px-3 pb-8 sm:px-5 lg:px-8"><main className="min-w-0 pt-6 lg:pt-8">
+      <div className="mx-auto max-w-[1560px] px-3 pb-24 sm:px-5 lg:px-8 lg:pb-12">
+        <main className="min-w-0 pt-6 lg:pt-8">
           <div className="mx-auto max-w-[1500px] space-y-7">
             <section className="space-y-4">
-              <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-                <div className="space-y-2">
-                  <h1 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-4xl">{tituloPagina}</h1>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">{legendaPrincipal}</p>
+              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div className="space-y-1.5">
+                  <h1 className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-3xl lg:text-4xl">{tituloPagina}</h1>
+                  <p className="text-body-sm text-slate-500 dark:text-slate-400">{legendaPrincipal}</p>
                 </div>
 
                 {abaAtiva !== 'categorias' && <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setPainelAtivo('filtros')}
-                    className="inline-flex h-11 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:text-white"
+                    className="inline-flex h-11 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:text-white shadow-subtle"
                   >
                     <Filter className="h-4 w-4" />
                     {t('library.filters')}
                     {filtrosAtivos > 0 && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs dark:bg-slate-800">
+                      <span className="rounded-full bg-accent/20 text-accent-foreground dark:text-accent px-2 py-0.5 text-xs font-semibold">
                         {filtrosAtivos}
                       </span>
                     )}
@@ -350,7 +351,7 @@ export default function Biblioteca() {
                   <button
                     type="button"
                     onClick={recarregar}
-                    className="inline-flex h-11 items-center gap-2 rounded-full border border-transparent px-4 text-sm font-medium text-slate-500 transition hover:bg-white hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white"
+                    className="inline-flex h-11 items-center gap-2 rounded-full border border-slate-200/60 bg-transparent px-4 text-sm font-medium text-slate-500 transition hover:bg-white hover:text-slate-900 dark:border-slate-800/60 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white"
                   >
                     <RefreshCcw className="h-4 w-4" />
                     {t('library.refresh')}
@@ -362,7 +363,7 @@ export default function Biblioteca() {
 
             {!mostrarResumoCategorias && (
               <section className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${abaAtiva === 'categorias' ? 'category-books-toolbar' : ''}`}>
-                {abaAtiva === 'categorias' ? <h2 className="text-lg font-semibold text-slate-950 dark:text-white">{t('library.allBooks')}</h2> : <div className="text-sm text-slate-500 dark:text-slate-400">{busca ? t('library.result',{query:busca}) : t('library.featured')}</div>}
+                {abaAtiva === 'categorias' ? <h2 className="text-lg font-semibold text-slate-950 dark:text-white">{t('library.allBooks')}</h2> : <div className="text-body-sm text-slate-500 dark:text-slate-400">{busca ? t('library.result',{query:busca}) : t('library.featured')}</div>}
 
                 <div className="flex flex-wrap items-center gap-2">
                   {abaAtiva === 'categorias' && <label title="Inclui livros armazenados nas categorias abaixo desta." className="category-descendants-toggle category-toolbar-toggle">
@@ -376,7 +377,7 @@ export default function Biblioteca() {
                   <select
                     value={ordenacao}
                     onChange={(event) => setOrdenacao(event.target.value)}
-                    className="library-select h-11 min-w-[180px] rounded-full px-4"
+                    className="library-select h-11 min-w-[180px] rounded-full px-4 border border-border bg-surface text-primary"
                   >
                     <option value="titulo">{t('library.titleSort')}</option>
                     <option value="autor">{t('library.author')}</option>
@@ -389,7 +390,7 @@ export default function Biblioteca() {
             )}
 
             {error && (
-              <div className="flex flex-wrap items-center gap-3 rounded-[1.5rem] border border-rose-200 bg-rose-50 p-4 text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
+              <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200 shadow-subtle">
                 <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
                 <p className="min-w-0 flex-1 text-sm font-medium">{error}</p>
                 <button type="button" onClick={tentarNovamente} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-current/20 px-4 text-sm font-semibold transition hover:bg-rose-100 dark:hover:bg-rose-900/40">
@@ -406,17 +407,18 @@ export default function Biblioteca() {
             ) : livrosOrdenados.length > 0 ? (
               <VirtualBookGrid livros={livrosOrdenados} favoritoIds={favoritosSet} onToggleFavorito={handleToggleFavorito} onOpen={setLivroSelecionado} onShowCategory={handleSelecionarCategoria} />
             ) : (
-              <div className="grid min-h-[260px] place-items-center rounded-[1.75rem] border border-dashed border-slate-300 bg-white/80 p-8 text-center dark:border-slate-700 dark:bg-slate-900/70">
+              <div className="grid min-h-[260px] place-items-center rounded-2xl border border-dashed border-border bg-surface/50 p-8 text-center">
                 <div className="space-y-2">
-                  <p className="text-lg font-semibold text-slate-900 dark:text-white">{mensagemVazia}</p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                  <p className="text-lg font-semibold text-primary">{mensagemVazia}</p>
+                  <p className="text-body-sm text-secondary">
                     {t('library.adjust')}
                   </p>
                 </div>
               </div>
             )}
           </div>
-        </main></div>
+        </main>
+      </div>
 
       <SlidingPanel
         open={painelAtivo === 'filtros'}
